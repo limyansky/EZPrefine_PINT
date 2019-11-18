@@ -21,7 +21,16 @@ def main():
     """
 
     # Add the docstring to the argument parser
+    # This doesn't currently work the way I want it to
+    # Try print(__doc__) to see.
     parser = argparse.ArgumentParser(description=__doc__)
+
+    # Add arguments
+    parser.add_argument('ft1', help='A barycentered fermi event file')
+    parser.add_argument('par', help='A .par file')
+    parser.add_argument('weightcol',
+                        help='The name of the column containing photon \
+                              weights')
 
     # Extract the arguments from the parser
     args = parser.parse_args()
