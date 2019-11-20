@@ -55,59 +55,14 @@ def main():
     parser.add_argument('--nbins', nargs='?', const=256)
     parser.add_argument('--phs', nargs='?', const=0.0)
 
-    # A random seed for the sampler
-    # More documentation needed
-    np.random.seed(0)
-    state = np.random.mtrand.RandomState()
-
-    ### Get information about the starting state ###
     # Extract the arguments from the parser
     args = parser.parse_args()
 
-    # Read in model
-    modelin = pint.models.get_model(args.par)
+    # Initialize the MCMC class (defined below)
+    MCMC_obj = MCMC(args)
 
-    # Extract target coordinates
-    t_coord = SkyCoord(modelin.RAJ.quantity, modelin.DECJ.quantity,
-                       frame="icrs")
-
-    # Read in Fermi data
-    fermi_data = load_Fermi_TOAs(args.ft1, args.weightcol, targetcoord=t_coord)
-
-    # Convert fermi data to TOAs object
-    # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
-    # Maybe it loads photon times, then converts to TOA object?
-    toas_list = toa.get_TOAs_list(fermi_data)
-    toas      = toa.TOAs(toalist=fermi_data)
-
-    # Introduce a small error so that residuals can be calculated
-    toas.table["error"] = 1.0
-    toas.filename = args.ft1
-    toas.compute_TDBs()
-    toas.compute_posvels(ephem="DE421", planets=False)
-
-    # Get weights
-    weights = np.array([w["weight"] for w in toas_list.table["flags"]])
-
-    # Compute model phase for each TOA
-    # I believe absolute phase is just a phase offset used to align data from
-    # multiple time perods or instruments.
-    iphss, phss = modelin.phase(toas_list)  # , abs_phase=True)
-
-    # Ensure all postive
-    phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
-
-    # Pull out the first H-Test
-    htest = hmw(phases, weights)
-
-    print(htest)
-
-    ### Initialize the MCMC fitter ###
-    sampler = EmceeSampler(nwalkers)
-
-    fitter = MCMCFitter(toas, modelin, sampler)
-
-    fitter.sampler.random_state = state
+    # Print the H-Test
+    MCMC_obj.h_test()
 
     # Return 0 to show that everything worked okay
     return 0
@@ -116,10 +71,90 @@ def main():
 # I create a class that will be worked with in main()
 class MCMC:
 
-    # Stores arguments from input argparse
+    # Initializes model to useful form
     def __init__(self, args):
 
+        # Store the input arguments
         self.args = args
+
+        # Create a known random seed for the MCMC
+        self.make_seed()
+
+        # Load the fermi data
+        self.read_fermi()
+
+        # Add errors to the fermi data (for residual minimization)
+        self.add_errors()
+
+    # Create a random seed
+    def make_seed(self, seed=0):
+
+        np.random.seed(0)
+        self.state = np.random.mtrand.RandomState()
+
+    # Store quantities related to Fermi data
+    def read_fermi(self):
+
+        # Read in model
+        self.modelin = pint.models.get_model(self.args.par)
+
+        # Extract target coordinates
+        self.t_coord = SkyCoord(self.modelin.RAJ.quantity,
+                                self.modelin.DECJ.quantity,
+                                frame="icrs")
+
+        # Read in Fermi data
+        self.data = load_Fermi_TOAs(self.args.ft1, self.args.weightcol,
+                                    targetcoord=self.t_coord)
+
+        # Convert fermi data to TOAs object
+        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
+        # Maybe it loads photon times, then converts to TOA object?
+        self.toas_list = toa.get_TOAs_list(self.data)
+        self.toas = toa.TOAs(toalist=self.data)
+
+        # Get the weights
+        self.weights = np.array([w["weight"]
+                                 for w in self.toas_list.table["flags"]])
+
+    # Add errors for use in minimizing the residuals
+    # I imagine taking this out at some point, as I would eventually like to
+    # minimize on the H-Test
+    def add_errors(self):
+
+        # Introduce a small error so that residuals can be calculated
+        self.toas.table["error"] = 1.0
+        self.toas.filename = self.args.ft1
+        self.toas.compute_TDBs()
+        self.toas.compute_posvels(ephem="DE421", planets=False)
+
+    # Initialize the MCMC fitter
+    def init_MCMC(self):
+
+        # Initialize the sampler
+        self.sampler = EmceeSampler(self.nwalkers)
+
+        # Initialie PINT's MCMC object
+        self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler)
+        self.fitter.sampler.random_state = self.state
+
+    # Returns the H-Test
+    def h_test(self):
+
+        # Compute model phase for each TOA
+        # I believe absolute phase is just a phase offset used to
+        # align data from multiple time perods or instruments.
+        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+
+        # Pull out the first H-Test
+        htest = hmw(phases, self.weights)
+
+        print(htest)
+
+        return htest
 
 
 # Probability fuctions for the MCMC fitter
