@@ -11,10 +11,14 @@ import pint.models
 from pint.fermi_toas import load_Fermi_TOAs
 import pint.toa as toa
 from pint.eventstats import hmw
+from pint.sampler import EmceeSampler
+from pint.mcmc_fitter import MCMCFitter
+from pint.residuals import Residuals
 
 # astropy imports
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+
 
 # The funciton that actually runs when this script is called
 def main():
@@ -44,6 +48,19 @@ def main():
                         help='The name of the column containing photon \
                               weights')
 
+    # I hardcode the following parameters for now
+    minWeight = 0.9
+    nwalkers = 10
+    nsteps = 50
+    nbins = 256
+    phs = 0.0
+
+    # A random seed for the sampler
+    # More documentation needed
+    np.random.seed(0)
+    state = np.random.mtrand.RandomState()
+
+    ### Get information about the starting state ###
     # Extract the arguments from the parser
     args = parser.parse_args()
 
@@ -60,15 +77,22 @@ def main():
     # Convert fermi data to TOAs object
     # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
     # Maybe it loads photon times, then converts to TOA object?
-    fermi_toas = toa.get_TOAs_list(fermi_data)
+    toas_list = toa.get_TOAs_list(fermi_data)
+    toas      = toa.TOAs(toalist=fermi_data)
+
+    # Introduce a small error so that residuals can be calculated
+    toas.table["error"] = 1.0
+    toas.filename = args.ft1
+    toas.compute_TDBs()
+    toas.compute_posvels(ephem="DE421", planets=False)
 
     # Get weights
-    weights = np.array([w["weight"] for w in fermi_toas.table["flags"]])
+    weights = np.array([w["weight"] for w in toas_list.table["flags"]])
 
     # Compute model phase for each TOA
     # I believe absolute phase is just a phase offset used to align data from
     # multiple time perods or instruments.
-    iphss, phss = modelin.phase(fermi_toas)  # , abs_phase=True)
+    iphss, phss = modelin.phase(toas_list)  # , abs_phase=True)
 
     # Ensure all postive
     phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
@@ -78,8 +102,22 @@ def main():
 
     print(htest)
 
+    ### Initialize the MCMC fitter ###
+    sampler = EmceeSampler(nwalkers)
+
+    fitter = MCMCFitter(toas, modelin, sampler)
+
+    fitter.sampler.random_state = state
+
     # Return 0 to show that everything worked okay
     return 0
+
+# Probability fuctions for the MCMC fitter
+def lnlikelihood_chi2(ftr, theta):
+    ftr.set_parameters(theta)
+    # Uncomment to view progress
+    # print('Count is: %d' % ftr.numcalls)
+    return -Residuals(toas=ftr.toas, model=ftr.model).chi2.value
 
 
 # If called from the commandline, run this script
