@@ -48,12 +48,12 @@ def main():
                         help='The name of the column containing photon \
                               weights')
 
-    # I hardcode the following parameters for now
-    minWeight = 0.9
-    nwalkers = 10
-    nsteps = 50
-    nbins = 256
-    phs = 0.0
+    # Optional arguments
+    parser.add_argument('--minWeight', nargs='?', const=0.9)
+    parser.add_argument('--nwalkers', nargs='?', const=10)
+    parser.add_argument('--nsteps', nargs='?', const=50)
+    parser.add_argument('--nbins', nargs='?', const=256)
+    parser.add_argument('--phs', nargs='?', const=0.0)
 
     # A random seed for the sampler
     # More documentation needed
@@ -111,6 +111,16 @@ def main():
 
     # Return 0 to show that everything worked okay
     return 0
+
+
+# I create a class that will be worked with in main()
+class MCMC:
+
+    # Stores arguments from input argparse
+    def __init__(self, args):
+
+        self.args = args
+
 
 # Probability fuctions for the MCMC fitter
 def lnlikelihood_chi2(ftr, theta):
