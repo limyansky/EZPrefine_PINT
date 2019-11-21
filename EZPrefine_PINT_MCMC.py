@@ -51,7 +51,7 @@ def main():
     # Optional arguments
     parser.add_argument('--minWeight', nargs='?', default=0.9)
     parser.add_argument('--nwalkers', nargs='?', default=16)
-    parser.add_argument('--nsteps', nargs='?', default=50)
+    parser.add_argument('--nsteps', nargs='?', default=250)
     parser.add_argument('--nbins', nargs='?', default=256)
     parser.add_argument('--phs', nargs='?', default=0.0)
 
@@ -182,6 +182,9 @@ class MCMC:
 
         # Pull out the H-Test
         htest = hmw(phases, self.weights)
+
+        #print(params)
+        #print(htest)
 
         return htest
 
