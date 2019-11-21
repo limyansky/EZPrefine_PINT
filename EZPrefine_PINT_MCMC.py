@@ -62,7 +62,7 @@ def main():
     MCMC_obj = MCMC(args)
 
     # Print the H-Test
-    MCMC_obj.h_test(MCMC_obj.model)
+    MCMC_obj.h_test(MCMC_obj.modelin)
 
     # Run the MCMC
     MCMC_obj.run_MCMC()
