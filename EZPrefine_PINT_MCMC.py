@@ -70,7 +70,7 @@ def main():
     # Print the output of the MCMC
     MCMC_obj.MCMC_output()
 
-    MCMC_obj.h_test(MCMC_obj.fitter.model)
+    MCMC_obj.htest(MCMC_obj.fitter.model)
 
     # Return 0 to show that everything worked okay
     return 0
