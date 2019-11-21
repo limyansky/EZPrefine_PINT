@@ -12,7 +12,7 @@ from pint.fermi_toas import load_Fermi_TOAs
 import pint.toa as toa
 from pint.eventstats import hmw
 from pint.sampler import EmceeSampler
-from pint.mcmc_fitter import MCMCFitter
+from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
 
 # astropy imports
@@ -143,7 +143,10 @@ class MCMC:
 
         # Initialie PINT's MCMC object
         self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
-                                 lnlike=self.MCMC_htest, weights=self.weights)
+                                lnlike=self.MCMC_htest, weights=self.weights)
+        # self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
+        #                          weights=self.weights,
+        #                          lnlike=lnlikelihood_chi2)
         self.fitter.sampler.random_state = self.state
 
     # Returns the H-Test
@@ -187,7 +190,7 @@ class MCMC:
         print()
         print('In the MCMC')
         print()
-        self.fitter.fit_toas(maxiter=self.args.nsteps, pos=None)
+        self.fitter.fit_toas(maxiter=self.args.nsteps)
         self.fitter.set_parameters(self.fitter.maxpost_fitvals)
 
     # Print MCMC output
