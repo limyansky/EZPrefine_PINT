@@ -143,7 +143,7 @@ class MCMC:
 
         # Initialie PINT's MCMC object
         self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
-                                 lnlike=self.MCMC_htest)
+                                 lnlike=self.MCMC_htest, weights=self.weights)
         self.fitter.sampler.random_state = self.state
 
     # Returns the H-Test
