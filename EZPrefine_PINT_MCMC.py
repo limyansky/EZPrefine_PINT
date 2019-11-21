@@ -70,7 +70,7 @@ def main():
     # Print the output of the MCMC
     MCMC_obj.MCMC_output()
 
-    MCMC_obj.htest(MCMC_obj.fitter.model)
+    MCMC_obj.h_test(MCMC_obj.fitter.model)
 
     # Return 0 to show that everything worked okay
     return 0
@@ -143,7 +143,7 @@ class MCMC:
 
         # Initialie PINT's MCMC object
         self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
-                                lnlike=self.MCMC_htest)
+                                 lnlike=self.MCMC_htest)
         # self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
         #                          weights=self.weights,
         #                          lnlike=lnlikelihood_chi2)
