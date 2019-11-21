@@ -49,11 +49,11 @@ def main():
                               weights')
 
     # Optional arguments
-    parser.add_argument('--minWeight', nargs='?', const=0.9)
-    parser.add_argument('--nwalkers', nargs='?', const=10)
-    parser.add_argument('--nsteps', nargs='?', const=50)
-    parser.add_argument('--nbins', nargs='?', const=256)
-    parser.add_argument('--phs', nargs='?', const=0.0)
+    parser.add_argument('--minWeight', nargs='?', default=0.9)
+    parser.add_argument('--nwalkers', nargs='?', default=16)
+    parser.add_argument('--nsteps', nargs='?', default=50)
+    parser.add_argument('--nbins', nargs='?', default=256)
+    parser.add_argument('--phs', nargs='?', default=0.0)
 
     # Extract the arguments from the parser
     args = parser.parse_args()
@@ -62,7 +62,15 @@ def main():
     MCMC_obj = MCMC(args)
 
     # Print the H-Test
-    MCMC_obj.h_test()
+    MCMC_obj.h_test(MCMC_obj.model)
+
+    # Run the MCMC
+    MCMC_obj.run_MCMC()
+
+    # Print the output of the MCMC
+    MCMC_obj.MCMC_output()
+
+    MCMC_obj.htest(MCMC_obj.fitter.model)
 
     # Return 0 to show that everything worked okay
     return 0
@@ -77,20 +85,14 @@ class MCMC:
         # Store the input arguments
         self.args = args
 
-        # Create a known random seed for the MCMC
-        self.make_seed()
-
         # Load the fermi data
         self.read_fermi()
 
         # Add errors to the fermi data (for residual minimization)
         self.add_errors()
 
-    # Create a random seed
-    def make_seed(self, seed=0):
-
-        np.random.seed(0)
-        self.state = np.random.mtrand.RandomState()
+        # setup the MCMC to run
+        self.init_MCMC()
 
     # Store quantities related to Fermi data
     def read_fermi(self):
@@ -131,20 +133,26 @@ class MCMC:
     # Initialize the MCMC fitter
     def init_MCMC(self):
 
+        # Make a random seed
+
+        np.random.seed(0)
+        self.state = np.random.mtrand.RandomState()
+
         # Initialize the sampler
-        self.sampler = EmceeSampler(self.nwalkers)
+        self.sampler = EmceeSampler(self.args.nwalkers)
 
         # Initialie PINT's MCMC object
-        self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler)
+        self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
+                                 lnlike=self.MCMC_htest)
         self.fitter.sampler.random_state = self.state
 
     # Returns the H-Test
-    def h_test(self):
+    def h_test(self, model):
 
         # Compute model phase for each TOA
         # I believe absolute phase is just a phase offset used to
         # align data from multiple time perods or instruments.
-        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+        iphss, phss = model.phase(self.toas_list)  # , abs_phase=True)
 
         # Ensure all postive
         phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
@@ -156,13 +164,47 @@ class MCMC:
 
         return htest
 
+    # Compute the H-Test for a given set of parameters
+    # This is what the MCMC maximizes
+    def MCMC_htest(self, fitter, params):
 
-# Probability fuctions for the MCMC fitter
-def lnlikelihood_chi2(ftr, theta):
-    ftr.set_parameters(theta)
-    # Uncomment to view progress
-    # print('Count is: %d' % ftr.numcalls)
-    return -Residuals(toas=ftr.toas, model=ftr.model).chi2.value
+        # Update the fitter with the test parameters
+        fitter.set_parameters(params)
+
+        # Calcuate phases
+        iphss, phss = fitter.model.phase(self.toas_list)
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+
+        # Pull out the H-Test
+        htest = hmw(phases, self.weights)
+
+        return htest
+
+    # Run the MCMC
+    def run_MCMC(self):
+        print()
+        print('In the MCMC')
+        print()
+        self.fitter.fit_toas(maxiter=self.args.nsteps, pos=None)
+        self.fitter.set_parameters(self.fitter.maxpost_fitvals)
+
+    # Print MCMC output
+    def MCMC_output(self):
+
+        print()
+        print(self.fitter.model)
+        print()
+
+        # samples2 = self.sampler.sampler.chain[:, :, :].reshape((-1, self.fitter.n_fit_params))
+        # ranges2 = map(
+        #     lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
+        #     zip(*np.percentile(samples2, [16, 50, 84], axis=0)),
+        # )
+
+        # for name, vals in zip(self.fitter.fitkeys, ranges2):
+        #     print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
 
 
 # If called from the commandline, run this script
