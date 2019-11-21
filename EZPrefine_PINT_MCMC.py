@@ -143,7 +143,7 @@ class MCMC:
 
         # Initialie PINT's MCMC object
         self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
-                                lnlike=self.MCMC_htest, weights=self.weights)
+                                lnlike=self.MCMC_htest)
         # self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
         #                          weights=self.weights,
         #                          lnlike=lnlikelihood_chi2)
@@ -190,7 +190,7 @@ class MCMC:
         print()
         print('In the MCMC')
         print()
-        self.fitter.fit_toas(maxiter=self.args.nsteps)
+        self.fitter.fit_toas(maxiter=self.args.nsteps, pos=None)
         self.fitter.set_parameters(self.fitter.maxpost_fitvals)
 
     # Print MCMC output
