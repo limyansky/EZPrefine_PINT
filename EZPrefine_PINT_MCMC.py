@@ -9,6 +9,7 @@ import argparse
 # PINT imports
 import pint.models
 from pint.fermi_toas import load_Fermi_TOAs
+from pint.event_toas import load_NICER_TOAs
 import pint.toa as toa
 from pint.eventstats import hmw
 from pint.sampler import EmceeSampler
@@ -88,6 +89,9 @@ class MCMC:
         # Load the fermi data
         self.read_fermi()
 
+        # Load the NICER data
+        #self.read_NICER()
+
         # Add errors to the fermi data (for residual minimization)
         self.add_errors()
 
@@ -118,6 +122,27 @@ class MCMC:
         # Get the weights
         self.weights = np.array([w["weight"]
                                  for w in self.toas_list.table["flags"]])
+
+    # Store quantities related to NICER data
+    def read_NICER(self):
+        # Read in model
+        self.modelin = pint.models.get_model(self.args.par)
+
+        # Extract target coordinates
+        self.t_coord = SkyCoord(self.modelin.RAJ.quantity,
+                                self.modelin.DECJ.quantity,
+                                frame="icrs")
+
+        # Read in Fermi data
+        self.data = load_NICER_TOAs(self.args.ft1)
+
+        # Convert fermi data to TOAs object
+        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
+        # Maybe it loads photon times, then converts to TOA object?
+        self.toas_list = toa.get_TOAs_list(self.data)
+        self.toas = toa.TOAs(toalist=self.data)
+
+        self.weights = np.ones(len(self.data))
 
     # Add errors for use in minimizing the residuals
     # I imagine taking this out at some point, as I would eventually like to
