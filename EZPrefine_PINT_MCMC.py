@@ -19,6 +19,7 @@ from pint.residuals import Residuals
 # astropy imports
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.io import fits
 
 
 # The funciton that actually runs when this script is called
@@ -86,17 +87,45 @@ class MCMC:
         # Store the input arguments
         self.args = args
 
-        # Load the fermi data
-        self.read_fermi()
+        # Get the name of the telescope
+        tele = self.check_tele(self.args.ft1)
 
-        # Load the NICER data
-        #self.read_NICER()
+        # Use the appropriate function to load data
+
+        # If the telescope is Fermi (formally GLAST)...
+        # Note: should there be an additional check that the data comes from
+        # the LAT instrument?
+        if tele == 'GLAST':
+
+            # Load the fermi data
+            self.read_fermi()
+
+        # If the telescope is NICER...
+        elif tele == 'NICER':
+
+            # Load the NICER data
+            self.read_NICER()
 
         # Add errors to the fermi data (for residual minimization)
         self.add_errors()
 
         # setup the MCMC to run
         self.init_MCMC()
+
+    # Check which telescope is in the file header
+    def check_tele(self, data):
+
+        # Open the fits file
+        fits_file = fits.open(data)
+
+        # Extract the telescope name
+        name = fits_file[0].header['TELESCOP']
+
+        # Close the fits file
+        fits_file.close()
+
+        # Return the name of the telescope
+        return name
 
     # Store quantities related to Fermi data
     def read_fermi(self):
