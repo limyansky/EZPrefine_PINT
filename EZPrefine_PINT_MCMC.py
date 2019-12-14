@@ -44,7 +44,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
 
     # Add arguments
-    parser.add_argument('ft1', help='A barycentered fermi event file')
+    parser.add_argument('ft1', help='A barycentered fermi event file, or list'
+                                    'of files enclosed in [square brackets]',
+                                nargs='+')
     parser.add_argument('par', help='A .par file')
     parser.add_argument('weightcol',
                         help='The name of the column containing photon \
@@ -87,30 +89,65 @@ class MCMC:
         # Store the input arguments
         self.args = args
 
-        # Get the name of the telescope
-        tele = self.check_tele(self.args.ft1)
+        # Initialize weights and TOAs data
+        # These need to be initalized to empty so that make_toas doesn't
+        # throw an error of one of these datasets is not provided, and it tries
+        # to concatinate an unset variable with a list.
+        self.weights_fermi   = []
+        self.weights_NICER   = []
+        self.data_fermi      = []
+        self.data_NICER      = []
 
-        # Use the appropriate function to load data
+        # If only a string is given, turn it into a list
+        if type(self.args.ft1) is str:
+            self.args.ft1 = [self.args.ft1]
 
-        # If the telescope is Fermi (formally GLAST)...
-        # Note: should there be an additional check that the data comes from
-        # the LAT instrument?
-        if tele == 'GLAST':
+        # If only a string is given, turn it into a list
+        if type(self.args.weightcol) is str:
+            self.args.weightcol = [self.args.weightcol]
 
-            # Load the fermi data
-            self.read_fermi()
+        # Determine if multiple observations should be merged
+        for ii, jj in zip(self.args.ft1, self.args.weightcol):
 
-        # If the telescope is NICER...
-        elif tele == 'NICER':
+            # Get the name of the telescope
+            tele = self.check_tele(ii)
 
-            # Load the NICER data
-            self.read_NICER()
+            # Use the appropriate function to load data
+
+            # If the telescope is Fermi (formally GLAST)...
+            # Note: should there be an additional check that the data comes
+            # from the LAT instrument?
+            if tele == 'GLAST':
+
+                # Load the fermi data
+                self.read_fermi(ii, jj)
+
+            # If the telescope is NICER...
+            elif tele == 'NICER':
+
+                # Load the NICER data
+                self.read_NICER(ii)
+
+        # Perform the merging
+        self.make_TOAs()
 
         # Add errors to the fermi data (for residual minimization)
         self.add_errors()
 
         # setup the MCMC to run
         self.init_MCMC()
+
+    # Combine TOAs, TOAs_list, and weights accross different instruments
+    def make_TOAs(self):
+
+        # Get the toa object
+        self.toas = toa.TOAs(toalist=self.data_fermi + self.data_NICER)
+
+        # Get the toa list
+        self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER)
+
+        # Combine weights from individual observatories
+        self.weights = np.concatenate((self.weights_fermi, self.weights_NICER))
 
     # Check which telescope is in the file header
     def check_tele(self, data):
@@ -128,7 +165,7 @@ class MCMC:
         return name
 
     # Store quantities related to Fermi data
-    def read_fermi(self):
+    def read_fermi(self, ft1_file, weight_name):
 
         # Read in model
         self.modelin = pint.models.get_model(self.args.par)
@@ -139,18 +176,18 @@ class MCMC:
                                 frame="icrs")
 
         # Read in Fermi data
-        self.data = load_Fermi_TOAs(self.args.ft1, self.args.weightcol,
-                                    targetcoord=self.t_coord)
+        self.data_fermi = load_Fermi_TOAs(ft1_file, weight_name,
+                                          targetcoord=self.t_coord)
 
         # Convert fermi data to TOAs object
         # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
         # Maybe it loads photon times, then converts to TOA object?
-        self.toas_list = toa.get_TOAs_list(self.data)
-        self.toas = toa.TOAs(toalist=self.data)
+        self.toas_list_fermi = toa.get_TOAs_list(self.data_fermi)
+        #self.toas_fermi = toa.TOAs(toalist=self.data)
 
         # Get the weights
-        self.weights = np.array([w["weight"]
-                                 for w in self.toas_list.table["flags"]])
+        self.weights_fermi = np.array([w["weight"]
+                                 for w in self.toas_list_fermi.table["flags"]])
 
     # Store quantities related to NICER data
     def read_NICER(self):
@@ -163,15 +200,15 @@ class MCMC:
                                 frame="icrs")
 
         # Read in Fermi data
-        self.data = load_NICER_TOAs(self.args.ft1)
+        self.data_NICER = load_NICER_TOAs(self.args.ft1)
 
         # Convert fermi data to TOAs object
         # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
         # Maybe it loads photon times, then converts to TOA object?
-        self.toas_list = toa.get_TOAs_list(self.data)
-        self.toas = toa.TOAs(toalist=self.data)
+        #self.toas_list_NICER = toa.get_TOAs_list(self.data)
+        #self.toas_NICER = toa.TOAs(toalist=self.data)
 
-        self.weights = np.ones(len(self.data))
+        self.weights_NICER = np.ones(len(self.data))
 
     # Add errors for use in minimizing the residuals
     # I imagine taking this out at some point, as I would eventually like to
