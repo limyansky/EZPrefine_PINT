@@ -10,6 +10,7 @@ import argparse
 import pint.models
 from pint.fermi_toas import load_Fermi_TOAs
 from pint.event_toas import load_NICER_TOAs
+from pint.event_toas import load_NuSTAR_TOAs
 import pint.toa as toa
 from pint.eventstats import hmw
 from pint.sampler import EmceeSampler
@@ -95,19 +96,21 @@ class MCMC:
         # to concatinate an unset variable with a list.
         self.weights_fermi   = []
         self.weights_NICER   = []
+        self.weights_NuSTAR  = []
         self.data_fermi      = []
         self.data_NICER      = []
+        self.data_NuSTAR     = []
 
         # If only a string is given, turn it into a list
         if type(self.args.ft1) is str:
             self.args.ft1 = [self.args.ft1]
 
         # If only a string is given, turn it into a list
-        if type(self.args.weightcol) is str:
-            self.args.weightcol = [self.args.weightcol]
+        #if type(self.args.weightcol) is str:
+            #self.args.weightcol = [self.args.weightcol]
 
         # Determine if multiple observations should be merged
-        for ii, jj in zip(self.args.ft1, self.args.weightcol):
+        for ii in self.args.ft1:
 
             # Get the name of the telescope
             tele = self.check_tele(ii)
@@ -120,7 +123,7 @@ class MCMC:
             if tele == 'GLAST':
 
                 # Load the fermi data
-                self.read_fermi(ii, jj)
+                self.read_fermi(ii, self.args.weightcol)
 
             # If the telescope is NICER...
             elif tele == 'NICER':
@@ -128,10 +131,16 @@ class MCMC:
                 # Load the NICER data
                 self.read_NICER(ii)
 
+            # If the telescope is NuSTAR
+            if tele == 'NuSTAR':
+
+                # Load the NuSTAR data
+                self.read_NuSTAR(ii)
+
         # Perform the merging
         self.make_TOAs()
 
-        # Add errors to the fermi data (for residual minimization)
+        # Add errors to the data (for residual minimization)
         self.add_errors()
 
         # setup the MCMC to run
@@ -141,13 +150,16 @@ class MCMC:
     def make_TOAs(self):
 
         # Get the toa object
-        self.toas = toa.TOAs(toalist=self.data_fermi + self.data_NICER)
+        self.toas = toa.TOAs(toalist=self.data_fermi + self.data_NICER +
+                             self.data_NuSTAR)
 
         # Get the toa list
-        self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER)
+        self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
+                                           self.data_NuSTAR)
 
         # Combine weights from individual observatories
-        self.weights = np.concatenate((self.weights_fermi, self.weights_NICER))
+        self.weights = np.concatenate((self.weights_fermi, self.weights_NICER,
+                                       self.weights_NuSTAR))
 
     # Check which telescope is in the file header
     def check_tele(self, data):
@@ -190,7 +202,7 @@ class MCMC:
                                  for w in self.toas_list_fermi.table["flags"]])
 
     # Store quantities related to NICER data
-    def read_NICER(self):
+    def read_NICER(self, ft1_file):
         # Read in model
         self.modelin = pint.models.get_model(self.args.par)
 
@@ -200,7 +212,7 @@ class MCMC:
                                 frame="icrs")
 
         # Read in Fermi data
-        self.data_NICER = load_NICER_TOAs(self.args.ft1)
+        self.data_NICER = load_NICER_TOAs(ft1_file)
 
         # Convert fermi data to TOAs object
         # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
@@ -208,7 +220,29 @@ class MCMC:
         #self.toas_list_NICER = toa.get_TOAs_list(self.data)
         #self.toas_NICER = toa.TOAs(toalist=self.data)
 
-        self.weights_NICER = np.ones(len(self.data))
+        self.weights_NICER = np.ones(len(self.data_NICER))
+
+    # Store quantities related to NICER data
+    def read_NuSTAR(self, ft1_file):
+        # Read in model
+        self.modelin = pint.models.get_model(self.args.par)
+
+        # Extract target coordinates
+        self.t_coord = SkyCoord(self.modelin.RAJ.quantity,
+                                self.modelin.DECJ.quantity,
+                                frame="icrs")
+
+        # Read in Fermi data
+        self.data_NuSTAR = load_NuSTAR_TOAs(ft1_file)
+
+        # Convert fermi data to TOAs object
+        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
+        # Maybe it loads photon times, then converts to TOA object?
+        #self.toas_list_NICER = toa.get_TOAs_list(self.data)
+        #self.toas_NICER = toa.TOAs(toalist=self.data)
+
+        self.weights_NuSTAR = np.ones(len(self.data_NuSTAR))
+
 
     # Add errors for use in minimizing the residuals
     # I imagine taking this out at some point, as I would eventually like to
@@ -226,7 +260,7 @@ class MCMC:
 
         # Make a random seed
 
-        np.random.seed(0)
+        # np.random.seed(0)
         self.state = np.random.mtrand.RandomState()
 
         # Initialize the sampler
