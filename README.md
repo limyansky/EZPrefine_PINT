@@ -2,7 +2,7 @@
 An attempt to implement EZPrefine (by Mario) using the framework of PINT.
 
 EZPrefine was made for refining pulsar candidates in fermi data, and operates
-based off of MCMC. It is somehting I personally have used before, and am 
+based off of MCMC. It is somehting I have used before, and am 
 confident that it works. 
 
 PINT is the latest implimentation pulsar timing, this time in python. 
