@@ -328,14 +328,15 @@ class MCMC:
         print(self.fitter.model)
         print()
 
-        # samples2 = self.sampler.sampler.chain[:, :, :].reshape((-1, self.fitter.n_fit_params))
-        # ranges2 = map(
-        #     lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
-        #     zip(*np.percentile(samples2, [16, 50, 84], axis=0)),
-        # )
+        # This prints the 16th, 50th, and 84th percentile ranges of the fit.
+        samples2 = self.sampler.sampler.chain[:, :, :].reshape((-1, self.fitter.n_fit_params))
+        ranges2 = map(
+            lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
+            zip(*np.percentile(samples2, [16, 50, 84], axis=0)),
+        )
 
-        # for name, vals in zip(self.fitter.fitkeys, ranges2):
-        #     print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
+        for name, vals in zip(self.fitter.fitkeys, ranges2):
+            print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
 
 
 # If called from the commandline, run this script
