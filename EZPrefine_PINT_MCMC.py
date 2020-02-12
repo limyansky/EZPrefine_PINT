@@ -45,20 +45,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
 
     # Add arguments
-    parser.add_argument('ft1', help='A barycentered fermi event file, or list'
-                                    'of files enclosed in [square brackets]',
-                                nargs='+')
+    parser.add_argument('ft1', help='A barycentered event file or files',
+                        nargs='+')
     parser.add_argument('par', help='A .par file')
     parser.add_argument('weightcol',
                         help='The name of the column containing photon \
                               weights')
 
     # Optional arguments
-    parser.add_argument('--minWeight', nargs='?', default=0.9)
-    parser.add_argument('--nwalkers', nargs='?', default=16)
-    parser.add_argument('--nsteps', nargs='?', default=250)
-    parser.add_argument('--nbins', nargs='?', default=256)
-    parser.add_argument('--phs', nargs='?', default=0.0)
+
+    # minWeights not Implimented
+    # parser.add_argument('--minWeight', nargs='?', default=0.9, type=float)
+    parser.add_argument('--nwalkers', nargs='?', default=16, type=int)
+    parser.add_argument('--nsteps', nargs='?', default=250, type=int)
+
+    # phs and nbins are related to a gaussian profile
+    # parser.add_argument('--nbins', nargs='?', default=256, type=int)
+    # parser.add_argument('--phs', nargs='?', default=0.0, type=float)
 
     # Extract the arguments from the parser
     args = parser.parse_args()
