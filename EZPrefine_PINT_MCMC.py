@@ -55,7 +55,7 @@ def main():
     # Optional arguments
 
     # minWeights not Implimented
-    # parser.add_argument('--minWeight', nargs='?', default=0.9, type=float)
+    parser.add_argument('--minWeight', nargs='?', default=0.0, type=float)
     parser.add_argument('--nwalkers', nargs='?', default=16, type=int)
     parser.add_argument('--nsteps', nargs='?', default=250, type=int)
 
@@ -192,7 +192,8 @@ class MCMC:
 
         # Read in Fermi data
         self.data_fermi = load_Fermi_TOAs(ft1_file, weight_name,
-                                          targetcoord=self.t_coord)
+                                          targetcoord=self.t_coord,
+                                          minweight=self.args.minWeight)
 
         # Convert fermi data to TOAs object
         # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
@@ -203,6 +204,11 @@ class MCMC:
         # Get the weights
         self.weights_fermi = np.array([w["weight"]
                                  for w in self.toas_list_fermi.table["flags"]])
+
+        print('\n')
+        print('%d photons from Fermi' % (len(self.weights_fermi)))
+        print('%f is the minimum weight' % (min(self.weights_fermi)))
+        print('\n')
 
     # Store quantities related to NICER data
     def read_NICER(self, ft1_file):
