@@ -16,11 +16,14 @@ from pint.eventstats import hmw
 from pint.sampler import EmceeSampler
 from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
+from pint.plot_utils import phaseogram
 
 # astropy imports
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.io import fits
+
+from copy import copy
 
 
 # The funciton that actually runs when this script is called
@@ -58,6 +61,8 @@ def main():
     parser.add_argument('--minWeight', nargs='?', default=0.0, type=float)
     parser.add_argument('--nwalkers', nargs='?', default=16, type=int)
     parser.add_argument('--nsteps', nargs='?', default=250, type=int)
+    parser.add_argument('--minMJD', nargs='?', default=None, type=float)
+    parser.add_argument('--maxMJD', nargs='?', default=None, type=float)
 
     # phs and nbins are related to a gaussian profile
     # parser.add_argument('--nbins', nargs='?', default=256, type=int)
@@ -81,7 +86,7 @@ def main():
     MCMC_obj.h_test(MCMC_obj.fitter.model)
 
     # Return 0 to show that everything worked okay
-    return 0
+    return MCMC_obj
 
 
 # I create a class that will be worked with in main()
@@ -145,6 +150,18 @@ class MCMC:
 
         # Add errors to the data (for residual minimization)
         self.add_errors()
+
+        self.mid_save()
+
+        # Check for minMJD
+        if self.args.minMJD is not None:
+            self.args.minMJD = self.args.minMJD * u.day
+            self.cut_minMJD()
+
+        # Check for maxMJD
+        if self.args.maxMJD is not None:
+            self.args.maxMJD = self.args.maxMJD * u.day
+            self.cut_maxMJD()
 
         # setup the MCMC to run
         self.init_MCMC()
@@ -347,7 +364,84 @@ class MCMC:
         for name, vals in zip(self.fitter.fitkeys, ranges2):
             print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
 
+    def mid_save(self):
+        self.all_weights = copy(self.weights)
+        self.all_toas     = copy(self.toas_list)
+
+    # Select data according to the minimum MJD
+    def cut_minMJD(self):
+
+        # Create the filter
+        selection_filter = self.toas_list.get_mjds() > self.args.minMJD
+
+        # Apply the filter to weights and the toas_list
+        self.toas_list.select(selection_filter)
+        self.weights = self.weights[selection_filter]
+
+    # Select data according to the maximum MJD
+    def cut_maxMJD(self):
+
+        #  Create the filter
+        selection_filter = self.toas_list.get_mjds() < self.args.maxMJD
+
+        # Apply the filter
+        self.toas_list.select(selection_filter)
+        self.weights = self.weights[selection_filter]
+
+    # Restore all the photons to the dataset
+    def cut_restore(self):
+
+        self.toas_list = copy(self.all_toas)
+        self.weights = copy(self.all_weights)
+
+    # Easily make new photon cuts
+    def update_cut(self, minMJD=None, maxMJD=None):
+
+        # Restore all photons
+        self.cut_restore()
+
+        # Check for minMJD
+        if minMJD is not None:
+            self.args.minMJD = minMJD * u.day
+            self.cut_minMJD()
+
+        # Check for maxMJD
+        if maxMJD is not None:
+            self.args.maxMJD = maxMJD * u.day
+            self.cut_maxMJD()
+
+    # Reset the MCMC object (with a new model), and get it ready to run again
+    def update_run(self, minMJD=None, maxMJD=None):
+
+        if minMJD is not None and maxMJD is not None:
+            # Return all the photons to the original dataset
+            self.update_cut(minMJD, maxMJD)
+
+        # Make the new model the old best fit model
+        self.modelin = copy(self.fitter.model)
+
+    # Plot the data in a phaseogram
+    def plot(self):
+
+        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+
+        # Pull out the first H-Test
+        htest = hmw(phases, self.weights)
+
+        print(htest)
+
+        phaseogram(self.toas_list.get_mjds(), phases, weights=self.weights)
+
+    # Plot the data in a binned phaseogram
+    def plot_binned(self):
+        return 0
+
+
+
 
 # If called from the commandline, run this script
 if __name__ == '__main__':
-    main()
+    MCMC_object = main()
