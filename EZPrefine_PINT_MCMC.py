@@ -16,7 +16,7 @@ from pint.eventstats import hmw
 from pint.sampler import EmceeSampler
 from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
-from pint.plot_utils import phaseogram
+from pint.plot_utils import phaseogram, phaseogram_binned
 
 # astropy imports
 from astropy.coordinates import SkyCoord
@@ -24,6 +24,11 @@ import astropy.units as u
 from astropy.io import fits
 
 from copy import copy
+
+# Plotting tools
+import matplotlib.pylab as plt
+
+from math import floor
 
 
 # The funciton that actually runs when this script is called
@@ -63,6 +68,8 @@ def main():
     parser.add_argument('--nsteps', nargs='?', default=250, type=int)
     parser.add_argument('--minMJD', nargs='?', default=None, type=float)
     parser.add_argument('--maxMJD', nargs='?', default=None, type=float)
+    parser.add_argument('--skip', default=False,
+                        help='If True, don\'t optimize.')
 
     # phs and nbins are related to a gaussian profile
     # parser.add_argument('--nbins', nargs='?', default=256, type=int)
@@ -78,12 +85,14 @@ def main():
     MCMC_obj.h_test(MCMC_obj.modelin)
 
     # Run the MCMC
-    MCMC_obj.run_MCMC()
+
+    if not args.skip:
+        MCMC_obj.run_MCMC()
 
     # Print the output of the MCMC
-    MCMC_obj.MCMC_output()
+        MCMC_obj.MCMC_output()
 
-    MCMC_obj.h_test(MCMC_obj.fitter.model)
+        MCMC_obj.h_test(MCMC_obj.fitter.model)
 
     # Return 0 to show that everything worked okay
     return MCMC_obj
@@ -337,7 +346,7 @@ class MCMC:
         #print(params)
         #print(htest)
 
-        return htest
+        return np.log(htest)
 
     # Run the MCMC
     def run_MCMC(self):
@@ -413,7 +422,7 @@ class MCMC:
     # Reset the MCMC object (with a new model), and get it ready to run again
     def update_run(self, minMJD=None, maxMJD=None):
 
-        if minMJD is not None and maxMJD is not None:
+        if minMJD is not None or maxMJD is not None:
             # Return all the photons to the original dataset
             self.update_cut(minMJD, maxMJD)
 
@@ -437,9 +446,54 @@ class MCMC:
 
     # Plot the data in a binned phaseogram
     def plot_binned(self):
+
+        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+
+        # Pull out the first H-Test
+        htest = hmw(phases, self.weights)
+
+        print(htest)
+
+        phaseogram_binned(self.toas_list.get_mjds(),
+                          phases, weights=self.weights)
         return 0
 
+    # Plot the weighted H-Test vs time
+    def plot_hmw(self):
 
+        # Calculate the phases
+        iphss, phss = self.modelin.phase(self.toas_list)
+
+        # Place to store the H-Test
+        h_vec = []
+        mjds = []
+
+        for ii in range(0, len(phss), int(floor(len(phss) / 50))):
+            h_vec.append(hmw(phss[0:ii], self.weights[0:ii]))
+            mjds.append(self.toas_list.get_mjds()[ii].value)
+
+        plt.plot(mjds, h_vec)
+        plt.show()
+
+        # Plot the weighted H-Test vs photon count
+    def plot_Phmw(self):
+
+        # Calculate the phases
+        iphss, phss = self.modelin.phase(self.toas_list)
+
+        # Place to store the H-Test
+        h_vec = []
+        photons = []
+
+        for ii in range(0, len(phss), int(floor(len(phss) / 50))):
+            h_vec.append(hmw(phss[0:ii], self.weights[0:ii]))
+            photons.append(len(phss[0:ii]))
+
+        plt.plot(photons, h_vec)
+        plt.show()
 
 
 # If called from the commandline, run this script
