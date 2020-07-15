@@ -12,7 +12,7 @@ from pint.fermi_toas import load_Fermi_TOAs
 from pint.event_toas import load_NICER_TOAs
 from pint.event_toas import load_NuSTAR_TOAs
 import pint.toa as toa
-from pint.eventstats import hmw
+from pint.eventstats import hmw, h2sig
 from pint.sampler import EmceeSampler
 from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
@@ -23,7 +23,7 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.io import fits
 
-from copy import copy
+from copy import copy, deepcopy
 
 # Plotting tools
 import matplotlib.pylab as plt
@@ -70,6 +70,7 @@ def main():
     parser.add_argument('--maxMJD', nargs='?', default=None, type=float)
     parser.add_argument('--skip', default=False,
                         help='If True, don\'t optimize.')
+    parser.add_argument('--ephem', default=None)
 
     # phs and nbins are related to a gaussian profile
     # parser.add_argument('--nbins', nargs='?', default=256, type=int)
@@ -184,7 +185,7 @@ class MCMC:
 
         # Get the toa list
         self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
-                                           self.data_NuSTAR)
+                                           self.data_NuSTAR, ephem=self.args.ephem)
 
         # Combine weights from individual observatories
         self.weights = np.concatenate((self.weights_fermi, self.weights_NICER,
@@ -224,7 +225,7 @@ class MCMC:
         # Convert fermi data to TOAs object
         # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
         # Maybe it loads photon times, then converts to TOA object?
-        self.toas_list_fermi = toa.get_TOAs_list(self.data_fermi)
+        self.toas_list_fermi = toa.get_TOAs_list(self.data_fermi, ephem=self.args.ephem)
         #self.toas_fermi = toa.TOAs(toalist=self.data)
 
         # Get the weights
@@ -286,9 +287,9 @@ class MCMC:
 
         # Introduce a small error so that residuals can be calculated
         self.toas.table["error"] = 1.0
-        self.toas.filename = self.args.ft1
-        self.toas.compute_TDBs()
-        self.toas.compute_posvels(ephem="DE421", planets=False)
+        #self.toas.filename = self.args.ft1
+        self.toas.compute_TDBs(ephem=self.args.ephem)
+        self.toas.compute_posvels(ephem=self.args.ephem, planets=False)
 
     # Initialize the MCMC fitter
     def init_MCMC(self):
@@ -346,7 +347,7 @@ class MCMC:
         #print(params)
         #print(htest)
 
-        return np.log(htest)
+        return htest
 
     # Run the MCMC
     def run_MCMC(self):
@@ -427,7 +428,7 @@ class MCMC:
             self.update_cut(minMJD, maxMJD)
 
         # Make the new model the old best fit model
-        self.modelin = copy(self.fitter.model)
+        self.modelin = deepcopy(self.fitter.model)
 
     # Plot the data in a phaseogram
     def plot(self):
@@ -494,6 +495,53 @@ class MCMC:
 
         plt.plot(photons, h_vec)
         plt.show()
+
+    # Backup the timing model.
+    # Store the current model in a value called restore_model
+    def backup_timing(self):
+        self.restore_model = deepcopy(self.modelin)
+
+    # Take the backed up model (restore_model), and put it back in the working
+    # model spot (modelin)
+    def restore_timing(self):
+        self.modelin = deepcopy(self.restore_model)
+
+    # Manually change F0
+    def change_F0(self, new_value):
+        self.modelin.F0.quantity = new_value * u.Hz
+
+    # Manually change F1
+    def change_F1(self, new_value):
+        self.modelin.F1.quantity = new_value * u.Hz / u.s
+
+    # Manually change F2
+    def change_F2(self, new_value):
+        self.modelin.F2.quantity = new_value * u.Hz / u.s ** 2
+
+    # Scan over a range of F1 values
+    def scan_F1(self, start, stop, step):
+        model = deepcopy(self.modelin)
+        significance = []
+        F1_range = np.arange(start, stop, step)
+
+        for ii in F1_range:
+
+            # Change F1
+            model.F1.quantity = ii * u.Hz / u.s
+
+            # Calculate the phases
+            iphss, phss = model.phase(self.toas_list)
+
+            # Should I ensure all phases are positive? I don't think so...
+
+            # Calculate the significance, and append it to the list
+            significance.append(h2sig(np.float(hmw(phss, self.weights))))
+            #significance.append(hmw(phss, self.weights))
+
+        plt.plot(F1_range, significance)
+        plt.show()
+
+        return significance
 
 
 # If called from the commandline, run this script
