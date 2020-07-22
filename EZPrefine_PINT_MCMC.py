@@ -71,6 +71,8 @@ def main():
     parser.add_argument('--skip', default=False,
                         help='If True, don\'t optimize.')
     parser.add_argument('--ephem', default=None)
+    parser.add_argument('--save_pick', default=False)
+    parser.add_argument('--load_pick', default=False)
 
     # phs and nbins are related to a gaussian profile
     # parser.add_argument('--nbins', nargs='?', default=256, type=int)
@@ -127,39 +129,67 @@ class MCMC:
         #if type(self.args.weightcol) is str:
             #self.args.weightcol = [self.args.weightcol]
 
-        # Determine if multiple observations should be merged
-        for ii in self.args.ft1:
+        if self.args.load_pick is False:
+            # Determine if multiple observations should be merged
+            for ii in self.args.ft1:
 
-            # Get the name of the telescope
-            tele = self.check_tele(ii)
+                # Get the name of the telescope
+                tele = self.check_tele(ii)
 
-            # Use the appropriate function to load data
+                # Use the appropriate function to load data
 
-            # If the telescope is Fermi (formally GLAST)...
-            # Note: should there be an additional check that the data comes
-            # from the LAT instrument?
-            if tele == 'GLAST':
+                # If the telescope is Fermi (formally GLAST)...
+                # Note: should there be an additional check that the data comes
+                # from the LAT instrument?
+                if tele == 'GLAST':
 
-                # Load the fermi data
-                self.read_fermi(ii, self.args.weightcol)
+                    # Load the fermi data
+                    self.read_fermi(ii, self.args.weightcol)
 
-            # If the telescope is NICER...
-            elif tele == 'NICER':
+                # If the telescope is NICER...
+                elif tele == 'NICER':
 
-                # Load the NICER data
-                self.read_NICER(ii)
+                    # Load the NICER data
+                    self.read_NICER(ii)
 
-            # If the telescope is NuSTAR
-            if tele == 'NuSTAR':
+                # If the telescope is NuSTAR
+                if tele == 'NuSTAR':
 
-                # Load the NuSTAR data
-                self.read_NuSTAR(ii)
+                    # Load the NuSTAR data
+                    self.read_NuSTAR(ii)
 
-        # Perform the merging
-        self.make_TOAs()
+            # Perform the merging
+            self.make_TOAs()
 
-        # Add errors to the data (for residual minimization)
-        self.add_errors()
+            # Add errors to the data (for residual minimization)
+            self.add_errors()
+
+        # If load_pick is not False, the user has specified a file
+        # Try loading it
+        elif self.args.load_pick is not False:
+            # load the model
+            self.modelin = pint.models.get_model(self.args.par)
+
+            # Read the saved pickle file
+            self.toas = toa.TOAs(self.args.load_pick + '.pickle')
+
+            # Create a toas_list from the loaded file
+            #self.toas_list = toa.get_TOAs_list([self.toas.toas[:]])
+
+            # This is a bit janky. TOA objects do not include a way to store
+            # photon weights. Thus, I am forced to save the weights as a
+            # separate file. The other option would be to... Somehow pickle it
+            # all together, load that output file, then split it up again in
+            # here. However, I don't want to figure that out right now. I also
+            # don't want to end up with a propritary file type.
+
+            # Thus, I simply append 'weights_' and move on.
+
+            # self.weights = np.load('weights_' + self.args.load_pick + '.npy')
+
+        if self.args.save_pick is not False:
+            self.toas.pickle(filename=self.args.save_pick + '.pickle')
+            # np.save('weights_' + self.args.save_pick + '.npy' , self.weights)
 
         self.mid_save()
 
@@ -184,12 +214,16 @@ class MCMC:
                              self.data_NuSTAR)
 
         # Get the toa list
-        self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
-                                           self.data_NuSTAR, ephem=self.args.ephem)
+        #self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
+        #                                   self.data_NuSTAR, ephem=self.args.ephem)
 
         # Combine weights from individual observatories
-        self.weights = np.concatenate((self.weights_fermi, self.weights_NICER,
-                                       self.weights_NuSTAR))
+        weights = np.concatenate((self.weights_fermi, self.weights_NICER,
+                                  self.weights_NuSTAR))
+
+        # add the weights to the TOAs object
+        for ii in range(len(weights)):
+            self.toas.table['flags'][ii]['weights'] = weights[ii]
 
     # Check which telescope is in the file header
     def check_tele(self, data):
@@ -222,15 +256,9 @@ class MCMC:
                                           targetcoord=self.t_coord,
                                           minweight=self.args.minWeight)
 
-        # Convert fermi data to TOAs object
-        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
-        # Maybe it loads photon times, then converts to TOA object?
-        self.toas_list_fermi = toa.get_TOAs_list(self.data_fermi, ephem=self.args.ephem)
-        #self.toas_fermi = toa.TOAs(toalist=self.data)
-
         # Get the weights
-        self.weights_fermi = np.array([w["weight"]
-                                 for w in self.toas_list_fermi.table["flags"]])
+        self.weights_fermi = np.array([w.flags["weight"]
+                                 for w in self.data_fermi])
 
         print('\n')
         print('%d photons from Fermi' % (len(self.weights_fermi)))
@@ -247,14 +275,8 @@ class MCMC:
                                 self.modelin.DECJ.quantity,
                                 frame="icrs")
 
-        # Read in Fermi data
+        # Read in NICER data
         self.data_NICER = load_NICER_TOAs(ft1_file)
-
-        # Convert fermi data to TOAs object
-        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
-        # Maybe it loads photon times, then converts to TOA object?
-        #self.toas_list_NICER = toa.get_TOAs_list(self.data)
-        #self.toas_NICER = toa.TOAs(toalist=self.data)
 
         self.weights_NICER = np.ones(len(self.data_NICER))
 
@@ -271,14 +293,7 @@ class MCMC:
         # Read in Fermi data
         self.data_NuSTAR = load_NuSTAR_TOAs(ft1_file)
 
-        # Convert fermi data to TOAs object
-        # I don't understand this. Does load_Fermi_TOAs not already load TOAs?
-        # Maybe it loads photon times, then converts to TOA object?
-        #self.toas_list_NICER = toa.get_TOAs_list(self.data)
-        #self.toas_NICER = toa.TOAs(toalist=self.data)
-
         self.weights_NuSTAR = np.ones(len(self.data_NuSTAR))
-
 
     # Add errors for use in minimizing the residuals
     # I imagine taking this out at some point, as I would eventually like to
@@ -316,13 +331,13 @@ class MCMC:
         # Compute model phase for each TOA
         # I believe absolute phase is just a phase offset used to
         # align data from multiple time perods or instruments.
-        iphss, phss = model.phase(self.toas_list)  # , abs_phase=True)
+        iphss, phss = model.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
         phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, self.weights)
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
 
         print(htest)
 
@@ -336,13 +351,13 @@ class MCMC:
         fitter.set_parameters(params)
 
         # Calcuate phases
-        iphss, phss = fitter.model.phase(self.toas_list)
+        iphss, phss = fitter.model.phase(self.toas)
 
         # Ensure all postive
         phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the H-Test
-        htest = hmw(phases, self.weights)
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
 
         #print(params)
         #print(htest)
@@ -375,34 +390,34 @@ class MCMC:
             print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
 
     def mid_save(self):
-        self.all_weights = copy(self.weights)
-        self.all_toas     = copy(self.toas_list)
+        # self.all_weights = copy(self.weights)
+        self.all_toas     = copy(self.toas)
 
     # Select data according to the minimum MJD
     def cut_minMJD(self):
 
         # Create the filter
-        selection_filter = self.toas_list.get_mjds() > self.args.minMJD
+        selection_filter = self.toas.get_mjds() > self.args.minMJD
 
         # Apply the filter to weights and the toas_list
-        self.toas_list.select(selection_filter)
-        self.weights = self.weights[selection_filter]
+        self.toas.select(selection_filter)
+        # self.weights = self.weights[selection_filter]
 
     # Select data according to the maximum MJD
     def cut_maxMJD(self):
 
         #  Create the filter
-        selection_filter = self.toas_list.get_mjds() < self.args.maxMJD
+        selection_filter = self.toas.get_mjds() < self.args.maxMJD
 
         # Apply the filter
-        self.toas_list.select(selection_filter)
-        self.weights = self.weights[selection_filter]
+        self.toas.select(selection_filter)
+        # self.weights = self.weights[selection_filter]
 
     # Restore all the photons to the dataset
     def cut_restore(self):
 
-        self.toas_list = copy(self.all_toas)
-        self.weights = copy(self.all_weights)
+        self.toas = deepcopy(self.all_toas)
+        # self.weights = copy(self.all_weights)
 
     # Easily make new photon cuts
     def update_cut(self, minMJD=None, maxMJD=None):
@@ -433,48 +448,50 @@ class MCMC:
     # Plot the data in a phaseogram
     def plot(self):
 
-        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+        iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
         phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, self.weights)
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
 
         print(htest)
 
-        phaseogram(self.toas_list.get_mjds(), phases, weights=self.weights)
+        phaseogram(self.toas.get_mjds(), phases,
+                   weights=np.array(self.toas.get_flag_value('weights')))
 
     # Plot the data in a binned phaseogram
     def plot_binned(self):
 
-        iphss, phss = self.modelin.phase(self.toas_list)  # , abs_phase=True)
+        iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
         phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, self.weights)
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
 
         print(htest)
 
-        phaseogram_binned(self.toas_list.get_mjds(),
-                          phases, weights=self.weights)
+        phaseogram_binned(self.toas.get_mjds(),
+                          phases, weights=np.array(self.toas.get_flag_value('weights')))
         return 0
 
     # Plot the weighted H-Test vs time
     def plot_hmw(self):
 
         # Calculate the phases
-        iphss, phss = self.modelin.phase(self.toas_list)
+        iphss, phss = self.modelin.phase(self.toas)
 
         # Place to store the H-Test
         h_vec = []
         mjds = []
 
         for ii in range(0, len(phss), int(floor(len(phss) / 50))):
-            h_vec.append(hmw(phss[0:ii], self.weights[0:ii]))
-            mjds.append(self.toas_list.get_mjds()[ii].value)
+            h_vec.append(hmw(phss[0:ii],
+                             np.array(self.toas.get_flag_value('weights')[0:ii])))
+            mjds.append(self.toas.get_mjds()[ii].value)
 
         plt.plot(mjds, h_vec)
         plt.show()
@@ -483,14 +500,15 @@ class MCMC:
     def plot_Phmw(self):
 
         # Calculate the phases
-        iphss, phss = self.modelin.phase(self.toas_list)
+        iphss, phss = self.modelin.phase(self.toas)
 
         # Place to store the H-Test
         h_vec = []
         photons = []
 
         for ii in range(0, len(phss), int(floor(len(phss) / 50))):
-            h_vec.append(hmw(phss[0:ii], self.weights[0:ii]))
+            h_vec.append(hmw(phss[0:ii],
+                             np.array(self.toas.get_flag_value('weights')[0:ii])))
             photons.append(len(phss[0:ii]))
 
         plt.plot(photons, h_vec)
@@ -519,10 +537,12 @@ class MCMC:
         self.modelin.F2.quantity = new_value * u.Hz / u.s ** 2
 
     # Scan over a range of F1 values
-    def scan_F1(self, start, stop, step):
-        model = deepcopy(self.modelin)
+    # def scan_F1(self, par_model, start, stop, step):
+    def scan_F1(self, par_model, values):
+        model = deepcopy(par_model)
         significance = []
-        F1_range = np.arange(start, stop, step)
+        # F1_range = np.arange(start, stop, step)
+        F1_range = values
 
         for ii in F1_range:
 
@@ -530,18 +550,73 @@ class MCMC:
             model.F1.quantity = ii * u.Hz / u.s
 
             # Calculate the phases
-            iphss, phss = model.phase(self.toas_list)
+            iphss, phss = model.phase(self.toas)
 
             # Should I ensure all phases are positive? I don't think so...
 
             # Calculate the significance, and append it to the list
-            significance.append(h2sig(np.float(hmw(phss, self.weights))))
-            #significance.append(hmw(phss, self.weights))
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
 
-        plt.plot(F1_range, significance)
-        plt.show()
+        # plt.plot(F1_range, significance)
+        # plt.show()
 
         return significance
+
+        # Scan over a range of F0 values
+    # def scan_F0(self, par_model, start, stop, step):
+    def scan_F0(self, par_model, values):
+        model = deepcopy(par_model)
+        significance = []
+        # F0_range = np.arange(start, stop, step)
+        F0_range = values
+
+        for ii in F0_range:
+
+            # Change F0
+            model.F0.quantity = ii * u.Hz
+
+            # Calculate the phases
+            iphss, phss = model.phase(self.toas)
+
+            # Should I ensure all phases are positive? I don't think so...
+
+            # Calculate the significance, and append it to the list
+            significance.append(hmw(phss,
+                                    np.array(self.toas.get_flag_value('weights'))))
+
+        # plt.plot(F1_range, significance)
+        # plt.show()
+
+        return significance
+
+    # Scan through a combination of F0 and F1 values
+    def scan_F0_F1(self, par_model, F0_values, F1_values):
+
+        # Make a working copy of the provided model
+        model = deepcopy(par_model)
+
+        # Initialize an array of the correct length
+        sig_array = np.zeros([1, len(F1_values)])
+
+        # Step through each F0 value
+        for ii in F0_values:
+
+            # Set the F0 value
+            model.F0.quantity = ii * u.Hz
+
+            # Use an existing method to scan F1
+            F1_single = self.scan_F1(model, F1_values)
+
+            # Store the output of the F1 scan
+            sig_array = np.append(sig_array, [F1_single], axis=0)
+
+        return np.delete(sig_array, 0, 0)
+
+def plot_scan(array, F0_values, F1_values):
+
+    plt.imshow(array, aspect='auto',
+               extent=[min(F1_values), max(F1_values),
+                       max(F0_values), min(F0_values)])
 
 
 # If called from the commandline, run this script
