@@ -334,7 +334,9 @@ class MCMC:
         iphss, phss = model.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
-        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
         htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
@@ -354,7 +356,10 @@ class MCMC:
         iphss, phss = fitter.model.phase(self.toas)
 
         # Ensure all postive
-        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # Legacy
+        # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the H-Test
         htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
@@ -451,7 +456,10 @@ class MCMC:
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
-        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # legacy
+        # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
         htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
@@ -467,7 +475,9 @@ class MCMC:
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
         # Ensure all postive
-        phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+        # Legacy
+        # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
         htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
@@ -535,6 +545,36 @@ class MCMC:
     # Manually change F2
     def change_F2(self, new_value):
         self.modelin.F2.quantity = new_value * u.Hz / u.s ** 2
+
+    # Manually change EPOCH
+    def change_epoch(self, new_value):
+        self.modelin.PEPOCH.quantity = str(new_value)
+        self.modelin.TZRMJD.quantity = str(new_value)
+
+    # Scan over a range of F2 values
+    def scan_F2(self, par_model, values):
+        model = deepcopy(par_model)
+        significance = []
+        # F1_range = np.arange(start, stop, step)
+        F2_range = values
+
+        for ii in F2_range:
+
+            # Change F2
+            model.F2.quantity = ii * u.Hz / u.s ** 2
+
+            # Calculate the phases
+            iphss, phss = model.phase(self.toas)
+
+            # Should I ensure all phases are positive? I don't think so...
+
+            # Calculate the significance, and append it to the list
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
+
+        # plt.plot(F1_range, significance)
+        # plt.show()
+
+        return significance
 
     # Scan over a range of F1 values
     # def scan_F1(self, par_model, start, stop, step):
@@ -609,6 +649,29 @@ class MCMC:
 
             # Store the output of the F1 scan
             sig_array = np.append(sig_array, [F1_single], axis=0)
+
+        return np.delete(sig_array, 0, 0)
+
+    # Scan through a combination of F0 and F1 values
+    def scan_F1_F2(self, par_model, F1_values, F2_values):
+
+        # Make a working copy of the provided model
+        model = deepcopy(par_model)
+
+        # Initialize an array of the correct length
+        sig_array = np.zeros([1, len(F2_values)])
+
+        # Step through each F0 value
+        for ii in F1_values:
+
+            # Set the F0 value
+            model.F1.quantity = ii * u.Hz / u.s
+
+            # Use an existing method to scan F1
+            F2_single = self.scan_F2(model, F2_values)
+
+            # Store the output of the F1 scan
+            sig_array = np.append(sig_array, [F2_single], axis=0)
 
         return np.delete(sig_array, 0, 0)
 
