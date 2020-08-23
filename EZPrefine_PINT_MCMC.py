@@ -451,7 +451,7 @@ class MCMC:
         self.modelin = deepcopy(self.fitter.model)
 
     # Plot the data in a phaseogram
-    def plot(self):
+    def plot(self, bins=100):
 
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
@@ -467,7 +467,8 @@ class MCMC:
         print(htest)
 
         phaseogram(self.toas.get_mjds(), phases,
-                   weights=np.array(self.toas.get_flag_value('weights')))
+                   weights=np.array(self.toas.get_flag_value('weights')),
+                   bins=bins)
 
     # Plot the data in a binned phaseogram
     def plot_binned(self):
