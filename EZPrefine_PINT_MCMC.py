@@ -16,7 +16,7 @@ from pint.eventstats import hmw, h2sig
 from pint.sampler import EmceeSampler
 from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
-from pint.plot_utils import phaseogram, phaseogram_binned
+from pint.plot_utils import phaseogram_binned
 
 # astropy imports
 from astropy.coordinates import SkyCoord
@@ -676,11 +676,100 @@ class MCMC:
 
         return np.delete(sig_array, 0, 0)
 
+    # Return the highest density time period
+    # This is ripped straight from PINT. For some reason, the most recent pip
+    # version doesn't include the .value for maxday, which is breaking
+    # everything.
+    def density(self, ndays=7):
+
+        """print the range of mjds (default 7 days) with the most toas"""
+        # TODO: implement sliding window
+        nbins = int((max(self.toas.get_mjds()) - min(self.toas.get_mjds())) / (ndays * u.d))
+        a = np.histogram(self.toas.get_mjds(), nbins)
+        maxday = int((a[1][np.argmax(a[0])]).value)
+        diff = int((a[1][1] - a[1][0]).value)
+        print(
+            "max density range (in steps of {} days -- {} bins) is from MJD {} to {} with {} toas.".format(
+                diff, nbins, maxday, maxday + diff, a[0].max()
+            )
+        )
+        return (maxday, maxday + diff)
+
 def plot_scan(array, F0_values, F1_values):
 
     plt.imshow(array, aspect='auto',
                extent=[min(F1_values), max(F1_values),
                        max(F0_values), min(F0_values)])
+
+
+# Stolen from PINT
+def phaseogram(
+    mjds,
+    phases,
+    weights=None,
+    title=None,
+    bins=100,
+    rotate=0.0,
+    size=5,
+    alpha=0.25,
+    width=6,
+    maxphs=2.0,
+    plotfile=None,
+):
+    """Make a nice 2-panel phaseogram"""
+    years = (mjds.value - 51544.0) / 365.25 + 2000.0
+    phss = phases + rotate
+    phss[phss > 1.0] -= 1.0
+    plt.figure(figsize=(width, 8))
+    ax1 = plt.subplot2grid((3, 1), (0, 0))
+    ax2 = plt.subplot2grid((3, 1), (1, 0), rowspan=2)
+    wgts = None if weights is None else np.concatenate((weights, weights))
+    h, x, p = ax1.hist(
+        np.concatenate((phss, phss + 1.0)),
+        int(maxphs * bins),
+        range=[0, maxphs],
+        weights=wgts,
+        color="k",
+        histtype="step",
+        fill=False,
+        lw=2,
+    )
+    ax1.set_xlim([0.0, maxphs])  # show 1 or more pulses
+
+    ### I CHANGE THIS TO ZERO SUPRESS THE TOP PLOT ###
+    ax1.set_ylim([0.9 * h.min(), 1.1 * h.max()])
+
+    if weights is not None:
+        ax1.set_ylabel("Weighted Counts")
+    else:
+        ax1.set_ylabel("Counts")
+    if title is not None:
+        ax1.set_title(title)
+    if weights is None:
+        ax2.scatter(phss, mjds, s=size, color="k", alpha=alpha)
+        ax2.scatter(phss + 1.0, mjds, s=size, color="k", alpha=alpha)
+    else:
+        colarray = np.array([[0.0, 0.0, 0.0, w] for w in weights])
+        ax2.scatter(phss, mjds, s=size, color=colarray)
+        ax2.scatter(phss + 1.0, mjds, s=size, color=colarray)
+    ax2.set_xlim([0.0, maxphs])  # show 1 or more pulses
+    ax2.set_ylim([mjds.min().value, mjds.max().value])
+    ax2.set_ylabel("MJD")
+    ax2.get_yaxis().get_major_formatter().set_useOffset(False)
+    ax2.get_yaxis().get_major_formatter().set_scientific(False)
+    ax2r = ax2.twinx()
+    ax2r.set_ylim([years.min(), years.max()])
+    ax2r.set_ylabel("Year")
+    ax2r.get_yaxis().get_major_formatter().set_useOffset(False)
+    ax2r.get_yaxis().get_major_formatter().set_scientific(False)
+    ax2.set_xlabel("Pulse Phase")
+    plt.tight_layout()
+    if plotfile is not None:
+        plt.savefig(plotfile)
+        plt.close()
+    else:
+        plt.show()
+
 
 
 # If called from the commandline, run this script
