@@ -451,7 +451,7 @@ class MCMC:
         self.modelin = deepcopy(self.fitter.model)
 
     # Plot the data in a phaseogram
-    def plot(self, bins=100):
+    def plot(self, bins=100, plotfile=None):
 
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
@@ -468,10 +468,10 @@ class MCMC:
 
         phaseogram(self.toas.get_mjds(), phases,
                    weights=np.array(self.toas.get_flag_value('weights')),
-                   bins=bins)
+                   bins=bins, plotfile=plotfile)
 
     # Plot the data in a binned phaseogram
-    def plot_binned(self):
+    def plot_binned(self, plotfile=None):
 
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
@@ -486,7 +486,9 @@ class MCMC:
         print(htest)
 
         phaseogram_binned(self.toas.get_mjds(),
-                          phases, weights=np.array(self.toas.get_flag_value('weights')))
+                          phases,
+                          weights=np.array(self.toas.get_flag_value('weights')),
+                          plotfile=plotfile)
         return 0
 
     # Plot the weighted H-Test vs time
