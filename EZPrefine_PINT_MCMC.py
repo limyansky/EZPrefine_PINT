@@ -492,25 +492,51 @@ class MCMC:
         return 0
 
     # Plot the weighted H-Test vs time
-    def plot_hmw(self):
+    def plot_hmw(self, plotfile=None, sort=False):
 
         # Calculate the phases
         iphss, phss = self.modelin.phase(self.toas)
+
+        # Pull out the weights
+        weights = np.array(self.toas.get_flag_value('weights'))
+
+        # Pull out the MJDs
+        photon_mjds = self.toas.get_mjds().value
+
+        # Sometimes, the data will need to be sorted
+        if sort:
+            zipped = zip(photon_mjds, phss, weights)
+
+            sorted_data = sorted(zipped)
+
+            tuples = zip(*sorted_data)
+            photon_mjds, phss, weights = [list(tuple) for tuple in tuples]
+
+            weights = np.array(weights)
 
         # Place to store the H-Test
         h_vec = []
         mjds = []
 
         for ii in range(0, len(phss), int(floor(len(phss) / 50))):
-            h_vec.append(hmw(phss[0:ii],
-                             np.array(self.toas.get_flag_value('weights')[0:ii])))
-            mjds.append(self.toas.get_mjds()[ii].value)
+            # h_vec.append(hmw(phss[0:ii],
+            #                  np.array(self.toas.get_flag_value('weights')[0:ii])))
+            # mjds.append(self.toas.get_mjds()[ii].value)
 
+            h_vec.append(hmw(phss[0:ii], weights[0:ii]))
+            mjds.append(photon_mjds[ii])
+            print(photon_mjds[ii])
+
+        print(mjds)
         plt.plot(mjds, h_vec)
-        plt.show()
+
+        if plotfile is not None:
+            plt.savefig(plotfile)
+        else:
+            plt.show()
 
         # Plot the weighted H-Test vs photon count
-    def plot_Phmw(self):
+    def plot_Phmw(self, plotfile=None):
 
         # Calculate the phases
         iphss, phss = self.modelin.phase(self.toas)
@@ -525,7 +551,11 @@ class MCMC:
             photons.append(len(phss[0:ii]))
 
         plt.plot(photons, h_vec)
-        plt.show()
+
+        if plotfile is not None:
+            plt.savefig(plotfile)
+        else:
+            plt.show()
 
     # Backup the timing model.
     # Store the current model in a value called restore_model
@@ -607,7 +637,7 @@ class MCMC:
 
         # Scan over a range of F0 values
     # def scan_F0(self, par_model, start, stop, step):
-    def scan_F0(self, par_model, values):
+    def scan_F0(self, par_model, values, plotfile=None, show=False):
         model = deepcopy(par_model)
         significance = []
         # F0_range = np.arange(start, stop, step)
@@ -627,8 +657,13 @@ class MCMC:
             significance.append(hmw(phss,
                                     np.array(self.toas.get_flag_value('weights'))))
 
-        # plt.plot(F1_range, significance)
-        # plt.show()
+        if plotfile is not None:
+            plt.plot(F0_range, significance)
+            plt.savefig(plotfile)
+
+        if show:
+            plt.plot(F0_range, significance)
+            plt.show()
 
         return significance
 
@@ -697,11 +732,15 @@ class MCMC:
         )
         return (maxday, maxday + diff)
 
-def plot_scan(array, F0_values, F1_values):
+def plot_scan(array, F0_values, F1_values, plotfile=None):
 
     plt.imshow(array, aspect='auto',
                extent=[min(F1_values), max(F1_values),
                        max(F0_values), min(F0_values)])
+
+    if plotfile is not None:
+        # Save the plot, if requested
+        plt.savefig(plotfile)
 
 
 # Stolen from PINT
@@ -771,7 +810,6 @@ def phaseogram(
         plt.close()
     else:
         plt.show()
-
 
 
 # If called from the commandline, run this script
