@@ -611,7 +611,13 @@ class MCMC:
 
     # Scan over a range of F1 values
     # def scan_F1(self, par_model, start, stop, step):
-    def scan_F1(self, par_model, values):
+    def scan_F1(self, values, plotfile=None, show=False, par_model=None):
+
+        # Set the par model to be the same one as stored in the object,
+        # if none is provided.
+        if par_model is None:
+            par_model = self.modelin
+
         model = deepcopy(par_model)
         significance = []
         # F1_range = np.arange(start, stop, step)
@@ -633,11 +639,25 @@ class MCMC:
         # plt.plot(F1_range, significance)
         # plt.show()
 
+        if plotfile is not None:
+            plt.plot(F1_range, significance)
+            plt.savefig(plotfile)
+
+        if show:
+            plt.plot(F1_range, significance)
+            plt.show()
+
         return significance
 
         # Scan over a range of F0 values
     # def scan_F0(self, par_model, start, stop, step):
-    def scan_F0(self, par_model, values, plotfile=None, show=False):
+    def scan_F0(self, values, plotfile=None, show=False, par_model=None):
+
+        # Set the par model to be the same one as stored in the object,
+        # if none is provided.
+        if par_model is None:
+            par_model = self.modelin
+
         model = deepcopy(par_model)
         significance = []
         # F0_range = np.arange(start, stop, step)
@@ -668,7 +688,11 @@ class MCMC:
         return significance
 
     # Scan through a combination of F0 and F1 values
-    def scan_F0_F1(self, par_model, F0_values, F1_values):
+    def scan_F0_F1(self, F0_values, F1_values, plotfile=None, show=False,
+                   par_model=None):
+
+        if par_model is None:
+            par_model = self.modelin
 
         # Make a working copy of the provided model
         model = deepcopy(par_model)
@@ -683,15 +707,28 @@ class MCMC:
             model.F0.quantity = ii * u.Hz
 
             # Use an existing method to scan F1
-            F1_single = self.scan_F1(model, F1_values)
+            F1_single = self.scan_F1(F1_values, par_model=model)
 
             # Store the output of the F1 scan
             sig_array = np.append(sig_array, [F1_single], axis=0)
 
-        return np.delete(sig_array, 0, 0)
+            #sig_array = np.delete(sig_array, 0, 0)
+        sig_array = sig_array.astype('float64')
+
+        # Plot the output, if requested.
+        if plotfile is not None or show:
+            self.plot_scan(sig_array, F0_values, F1_values, plotfile=plotfile,
+                           show=show, xlabel='F1', ylabel='F0')
+
+        return sig_array
+        #return np.delete(sig_array, 0, 0)
 
     # Scan through a combination of F0 and F1 values
-    def scan_F1_F2(self, par_model, F1_values, F2_values):
+    def scan_F1_F2(self, F1_values, F2_values, plotfile=None, show=False,
+                   par_model=None):
+
+        if par_model is None:
+            par_model = self.modelin
 
         # Make a working copy of the provided model
         model = deepcopy(par_model)
@@ -710,6 +747,11 @@ class MCMC:
 
             # Store the output of the F1 scan
             sig_array = np.append(sig_array, [F2_single], axis=0)
+
+        # Plot the output, if requested.
+        if plotfile is not None or show:
+            self.plot_scan(sig_array, F1_values, F2_values, plotfile=plotfile,
+                           show=show, xlabel='F1', ylabel='F2')
 
         return np.delete(sig_array, 0, 0)
 
@@ -732,15 +774,26 @@ class MCMC:
         )
         return (maxday, maxday + diff)
 
-def plot_scan(array, F0_values, F1_values, plotfile=None):
+    def plot_scan(self, array, F0_values, F1_values, plotfile=None, show=False,
+                  xlabel=None, ylabel=None):
 
-    plt.imshow(array, aspect='auto',
-               extent=[min(F1_values), max(F1_values),
-                       max(F0_values), min(F0_values)])
+        values = plt.imshow(array, aspect='auto',
+                            extent=[min(F1_values), max(F1_values),
+                                    max(F0_values), min(F0_values)])
 
-    if plotfile is not None:
-        # Save the plot, if requested
-        plt.savefig(plotfile)
+        plt.colorbar(values)
+
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        if plotfile is not None:
+            # Save the plot, if requested
+            plt.savefig(plotfile)
 
 
 # Stolen from PINT
