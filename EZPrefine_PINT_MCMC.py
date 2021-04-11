@@ -378,11 +378,7 @@ class MCMC:
         self.fitter.set_parameters(self.fitter.maxpost_fitvals)
 
     # Print MCMC output
-    def MCMC_output(self):
-
-        print()
-        print(self.fitter.model)
-        print()
+    def MCMC_output(self, savepar=None):
 
         # This prints the 16th, 50th, and 84th percentile ranges of the fit.
         samples2 = self.sampler.sampler.chain[:, :, :].reshape((-1, self.fitter.n_fit_params))
@@ -391,8 +387,23 @@ class MCMC:
             zip(*np.percentile(samples2, [16, 50, 84], axis=0)),
         )
 
-        for name, vals in zip(self.fitter.fitkeys, ranges2):
-            print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
+        # Print on the commandline
+        if savepar is None:
+            print()
+            print(self.fitter.model)
+            print()
+
+            for name, vals in zip(self.fitter.fitkeys, ranges2):
+                print("%8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals)
+
+        # Print to a file
+        elif savepar is not None:
+            with open(savepar, 'w') as file:
+                print(self.fitter.model, file=file)
+                print('', file=file)
+
+                for name, vals in zip(self.fitter.fitkeys, ranges2):
+                    print("# %8s:" % name + "%25.15g (+ %12.5g  / - %12.5g)" % vals, file=file)
 
     def mid_save(self):
         # self.all_weights = copy(self.weights)
