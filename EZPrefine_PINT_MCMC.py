@@ -30,9 +30,16 @@ import matplotlib.pylab as plt
 
 from math import floor
 
+import logging
+
+from scipy.optimize import minimize
 
 # The funciton that actually runs when this script is called
 def main():
+
+    # Option to disable logging
+    # logging.disable(logging.CRITICAL)
+
     """
     Runs a montecarlo optimization on fermi data.
 
@@ -591,7 +598,18 @@ class MCMC:
         self.modelin.F2.quantity = new_value * u.Hz / u.s ** 2
 
     # Manually change EPOCH
-    def change_epoch(self, new_value):
+    def change_epoch(self, new_value, update_timing=False):
+
+        # If updating the timing model is requested...
+        # This is only implimented with F0 at the moment
+        if update_timing:
+            dt = new_value - self.modelin.PEPOCH.value
+
+            # Convert dt from days to seconds
+            dt = dt * (24 * 60 * 60)
+            new_F0 = self.modelin.F0.value + (self.modelin.F1.value * dt)
+            self.change_F0(new_F0)
+
         self.modelin.PEPOCH.quantity = str(new_value)
         self.modelin.TZRMJD.quantity = str(new_value)
 
@@ -643,9 +661,11 @@ class MCMC:
             iphss, phss = model.phase(self.toas)
 
             # Should I ensure all phases are positive? I don't think so...
+            # Ensure all postive
+            phases = np.where(phss < 0.0, phss + 1.0, phss)
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
+            significance.append(hmw(phases, np.array(self.toas.get_flag_value('weights'))))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -713,6 +733,7 @@ class MCMC:
 
         # Step through each F0 value
         for ii in F0_values:
+            print('F0: ' + str(ii) + '/' + str(max(F0_values)))
 
             # Set the F0 value
             model.F0.quantity = ii * u.Hz
@@ -723,7 +744,7 @@ class MCMC:
             # Store the output of the F1 scan
             sig_array = np.append(sig_array, [F1_single], axis=0)
 
-            #sig_array = np.delete(sig_array, 0, 0)
+        sig_array = np.delete(sig_array, 0, 0)
         sig_array = sig_array.astype('float64')
 
         # Plot the output, if requested.
@@ -788,14 +809,22 @@ class MCMC:
     def plot_scan(self, array, F0_values, F1_values, plotfile=None, show=False,
                   xlabel=None, ylabel=None):
 
-        values = plt.imshow(array, aspect='auto',
-                            extent=[min(F1_values), max(F1_values),
-                                    max(F0_values), min(F0_values)])
+        fig, ax = plt.subplots()
 
-        plt.colorbar(values)
+        values = ax.imshow(array, aspect='auto',
+                           extent=[min(F1_values), max(F1_values),
+                                   max(F0_values), min(F0_values)])
 
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
+        fig.colorbar(values)
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        # Add a target at the highest value point
+        row, column = np.where(array == np.max(array))
+        print(F0_values[row], F1_values[column])
+        ax.axvline(F1_values[column], color='r')
+        ax.axhline(F0_values[row], color='r')
 
         plt.tight_layout()
 
@@ -804,7 +833,70 @@ class MCMC:
 
         if plotfile is not None:
             # Save the plot, if requested
-            plt.savefig(plotfile)
+            fig.savefig(plotfile)
+
+    # Run an optimization using scipy
+    def scipy_opt(self):
+
+        # Create a version of the par model to work with
+        workingPar = deepcopy(self.modelin)
+
+        # Create a list of free parameters
+        free_params = []
+        starting_vals = []
+        for ii in workingPar.params:
+
+            # Pull out the model component
+            par = getattr(workingPar, ii)
+
+            # Check if the modle component is free
+            # If so, add it to the list of free parameters
+            if not par.frozen:
+                free_params.append(ii)
+                starting_vals.append(par.value)
+
+        # A function to be optimized
+        def opt(values):
+
+            # Walk through the different parameters
+            for ii, jj in zip(free_params, values):
+
+                # Get the parameter
+                par = getattr(workingPar, ii)
+
+                # Set the parameter value according to the input list
+                par.value = jj
+
+            h_test = self.h_test(workingPar)
+
+            # Check that h_test is not zero
+            # if it is, make it nonzero instead
+            # Room for improvement here.
+            if h_test == 0:
+                h_test = 0.00001
+
+            # We want to minimize, so I divide
+            return 1 / h_test
+
+        # Run scipy optimize
+        result = minimize(opt, starting_vals, bounds=[(-1, 1)] * len(free_params), method='L-BFGS-B')
+
+        # Update the timing file
+        # Walk through the different parameters
+        for ii, jj in zip(free_params, result.x):
+
+            # Get the parameter
+            par = getattr(workingPar, ii)
+
+            # Set the parameter value according to the input list
+            par.value = jj
+
+        # Update the global model
+        self.modelin = deepcopy(workingPar)
+
+    def save_par(self, save_name):
+        with open(save_name, 'w') as file:
+            print(self.modelin, file=file)
 
 
 # Stolen from PINT
