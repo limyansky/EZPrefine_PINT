@@ -80,6 +80,7 @@ def main():
     parser.add_argument('--ephem', default=None)
     parser.add_argument('--save_pick', default=False)
     parser.add_argument('--load_pick', default=False)
+    parser.add_argument('--save_par', default=None, help='Automatically save the output of the MCMC in this location, in the form of a .par file.')
 
     # phs and nbins are related to a gaussian profile
     # parser.add_argument('--nbins', nargs='?', default=256, type=int)
@@ -100,7 +101,7 @@ def main():
         MCMC_obj.run_MCMC()
 
     # Print the output of the MCMC
-        MCMC_obj.MCMC_output()
+        MCMC_obj.MCMC_output(savepar=args.save_par)
 
         MCMC_obj.h_test(MCMC_obj.fitter.model)
 
