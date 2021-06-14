@@ -28,7 +28,7 @@ from copy import copy, deepcopy
 # Plotting tools
 import matplotlib.pylab as plt
 
-from math import floor
+from math import floor, ceil
 
 import logging
 
@@ -170,6 +170,7 @@ class MCMC:
             self.make_TOAs()
 
             # Add errors to the data (for residual minimization)
+            #print("Don't add errors.")
             self.add_errors()
 
         # If load_pick is not False, the user has specified a file
@@ -408,6 +409,36 @@ class MCMC:
         elif savepar is not None:
             with open(savepar, 'w') as file:
                 print(self.fitter.model, file=file)
+
+                # Print the start and stop times
+                # If the start is already specified, use it.
+                if self.args.minMJD is not None:
+                    start_string = 'START {}'.format(self.args.minMJD)
+                    print(start_string, file=file)
+
+                # If the start is not specified...
+                elif self.args.minMJD is None:
+
+                    # Get the minimum time value from the TOAs
+                    tmin = floor(min(self.toas.get_mjds()))
+                    start_string = 'START {}'.format(tmin)
+                    print(start_string, file=file)
+
+                # If the stop is already specified, use it.
+                if self.args.maxMJD is not None:
+                    finish_string = 'FINISH {}'.format(self.args.maxMJD)
+                    print(finish_string, file=file)
+
+                # If the start is not specified...
+                elif self.args.minMJD is None:
+
+                    # Get the minimum time value from the TOAs
+                    tmax = ceil(max(self.toas.get_mjds()))
+                    finish_string = 'START {}'.format(tmax)
+                    print(finish_string, file=file)
+
+                # Print the start times
+
                 print('', file=file)
 
                 for name, vals in zip(self.fitter.fitkeys, ranges2):
@@ -598,6 +629,10 @@ class MCMC:
     def change_F2(self, new_value):
         self.modelin.F2.quantity = new_value * u.Hz / u.s ** 2
 
+    # Manually chage F3
+    def change_F3(self, new_value):
+        self.modelin.F3.quantity = new_value * u.Hz / u.s ** 3
+
     # Manually change EPOCH
     def change_epoch(self, new_value, update_timing=False):
 
@@ -613,6 +648,31 @@ class MCMC:
 
         self.modelin.PEPOCH.quantity = str(new_value)
         self.modelin.TZRMJD.quantity = str(new_value)
+
+    # Scan over a range of F3 values
+    def scan_F3(self, par_model, values):
+        model = deepcopy(par_model)
+        significance = []
+        # F1_range = np.arange(start, stop, step)
+        F3_range = values
+
+        for ii in F3_range:
+
+            # Change F2
+            model.F3.quantity = ii * u.Hz / u.s ** 3
+
+            # Calculate the phases
+            iphss, phss = model.phase(self.toas)
+
+            # Should I ensure all phases are positive? I don't think so...
+
+            # Calculate the significance, and append it to the list
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
+
+        # plt.plot(F1_range, significance)
+        # plt.show()
+
+        return significance
 
     # Scan over a range of F2 values
     def scan_F2(self, par_model, values):
