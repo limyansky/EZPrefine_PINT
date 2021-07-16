@@ -34,6 +34,9 @@ import logging
 
 from scipy.optimize import minimize
 
+# Multiprocessing tools
+import multiprocessing as mp
+
 # The funciton that actually runs when this script is called
 def main():
 
@@ -348,7 +351,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
 
         print(htest)
 
@@ -371,7 +374,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
 
         #print(params)
         #print(htest)
@@ -512,12 +515,12 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
 
         print(htest)
 
         phaseogram(self.toas.get_mjds(), phases,
-                   weights=np.array(self.toas.get_flag_value('weights')),
+                   weights=np.array(self.toas.get_flag_value('weights')[0]),
                    bins=bins, plotfile=plotfile)
 
     # Plot the data in a binned phaseogram
@@ -537,7 +540,7 @@ class MCMC:
 
         phaseogram_binned(self.toas.get_mjds(),
                           phases,
-                          weights=np.array(self.toas.get_flag_value('weights')),
+                          weights=np.array(self.toas.get_flag_value('weights')[0]),
                           plotfile=plotfile)
         return 0
 
@@ -548,7 +551,7 @@ class MCMC:
         iphss, phss = self.modelin.phase(self.toas)
 
         # Pull out the weights
-        weights = np.array(self.toas.get_flag_value('weights'))
+        weights = np.array(self.toas.get_flag_value('weights')[0])
 
         # Pull out the MJDs
         photon_mjds = self.toas.get_mjds().value
@@ -597,7 +600,7 @@ class MCMC:
 
         for ii in range(0, len(phss), int(floor(len(phss) / 50))):
             h_vec.append(hmw(phss[0:ii],
-                             np.array(self.toas.get_flag_value('weights')[0:ii])))
+                             np.array(self.toas.get_flag_value('weights')[0][0:ii])))
             photons.append(len(phss[0:ii]))
 
         plt.plot(photons, h_vec)
@@ -667,7 +670,7 @@ class MCMC:
             # Should I ensure all phases are positive? I don't think so...
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0])))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -692,7 +695,7 @@ class MCMC:
             # Should I ensure all phases are positive? I don't think so...
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights'))))
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0])))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -726,7 +729,7 @@ class MCMC:
             phases = np.where(phss < 0.0, phss + 1.0, phss)
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phases, np.array(self.toas.get_flag_value('weights'))))
+            significance.append(hmw(phases, np.array(self.toas.get_flag_value('weights')[0])))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -767,7 +770,7 @@ class MCMC:
 
             # Calculate the significance, and append it to the list
             significance.append(hmw(phss,
-                                    np.array(self.toas.get_flag_value('weights'))))
+                                    np.array(self.toas.get_flag_value('weights')[0])))
 
         if plotfile is not None:
             plt.plot(F0_range, significance)
@@ -847,6 +850,44 @@ class MCMC:
                            show=show, xlabel='F1', ylabel='F2')
 
         return np.delete(sig_array, 0, 0)
+
+    # This will be called by multiprocessing code to run a multi-core
+    # F0, F1scan. It takes a single value of F0, then scans over F1 and F2.
+    def _multiScan_O2(self, F0_single, F1_values, F2_values, par_model=None):
+
+        # If a particular par model is not supplied, copy the existing one
+        if par_model is None:
+            par_model = self.modelin
+
+        # Make a working copy of the provided model
+        model = deepcopy(par_model)
+
+        # Set the F0 value as desired
+        model.F0.qualtity = F0_single * u.Hz
+
+        # Perform the scan over F1 and F2
+        scan_out = self.scan_F1_F2(F1_values, F2_values, par_model=model)
+
+        # Return the output
+        return scan_out
+
+    # A function that will use multiple cores to scan over values of F0, F1,
+    # and F2.
+    def multiScan_O2(self, F0_values, F1_values, F2_values,
+                     n_cores=None):
+
+        # If the number of cores is not specified, figure it out.
+        if n_cores is None:
+            n_cores = mp.cpu_count()
+
+        # Create the pool object
+        pool = mp.Pool(n_cores)
+
+        # Tell the pool object to run over _multiScan_02
+        results = [pool.apply(self._multiScan_O2,
+                              args=(F0, F1_values, F2_values)) for F0 in F0_values]
+
+        return results
 
     # Return the highest density time period
     # This is ripped straight from PINT. For some reason, the most recent pip
