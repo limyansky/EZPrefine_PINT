@@ -524,7 +524,7 @@ class MCMC:
                    bins=bins, plotfile=plotfile)
 
     # Plot the data in a binned phaseogram
-    def plot_binned(self, plotfile=None):
+    def plot_binned(self, plotfile=None, nbins=64):
 
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
@@ -541,7 +541,8 @@ class MCMC:
         phaseogram_binned(self.toas.get_mjds(),
                           phases,
                           weights=np.array(self.toas.get_flag_value('weights')[0]),
-                          plotfile=plotfile)
+                          plotfile=plotfile,
+                          bins=nbins)
         return 0
 
     # Plot the weighted H-Test vs time
