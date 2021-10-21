@@ -183,7 +183,9 @@ class MCMC:
             self.modelin = pint.models.get_model(self.args.par)
 
             # Read the saved pickle file
-            self.toas = toa.TOAs(self.args.load_pick + '.pickle')
+            self.toas = pint.toa.load_pickle(self.args.load_pick,
+                                             picklefilename=self.args.load_pick + '.pickle')
+            self.add_errors()
 
             # Create a toas_list from the loaded file
             #self.toas_list = toa.get_TOAs_list([self.toas.toas[:]])
@@ -199,9 +201,11 @@ class MCMC:
 
             # self.weights = np.load('weights_' + self.args.load_pick + '.npy')
 
+        # Saves the input data in the form of a pickle file for faster loading
+        # in the future.
         if self.args.save_pick is not False:
-            self.toas.pickle(filename=self.args.save_pick + '.pickle')
-            # np.save('weights_' + self.args.save_pick + '.npy' , self.weights)
+            pint.toa.save_pickle(self.toas,
+                                 picklefilename=self.args.save_pick + '.pickle')
 
         self.mid_save()
 
@@ -330,6 +334,7 @@ class MCMC:
         self.sampler = EmceeSampler(self.args.nwalkers)
 
         # Initialie PINT's MCMC object
+        print(self.toas)
         self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
                                  lnlike=self.MCMC_htest)
         # self.fitter = MCMCFitter(self.toas, self.modelin, self.sampler,
