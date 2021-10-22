@@ -239,7 +239,7 @@ class MCMC:
 
         # add the weights to the TOAs object
         for ii in range(len(weights)):
-            self.toas.table['flags'][ii]['weights'] = weights[ii]
+            self.toas.table['flags'][ii]['weights'] = str(weights[ii])
 
     # Check which telescope is in the file header
     def check_tele(self, data):
@@ -356,7 +356,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]).astype(float))
 
         print(htest)
 
@@ -379,7 +379,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]).astype(float))
 
         #print(params)
         #print(htest)
