@@ -520,7 +520,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]).astype(float))
 
         print(htest)
 
@@ -539,13 +539,13 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')).astype(float))
 
         print(htest)
 
         phaseogram_binned(self.toas.get_mjds(),
                           phases,
-                          weights=np.array(self.toas.get_flag_value('weights')[0]),
+                          weights=np.array(self.toas.get_flag_value('weights')[0]).astype(float),
                           plotfile=plotfile,
                           bins=nbins)
         return 0
@@ -606,7 +606,7 @@ class MCMC:
 
         for ii in range(0, len(phss), int(floor(len(phss) / 50))):
             h_vec.append(hmw(phss[0:ii],
-                             np.array(self.toas.get_flag_value('weights')[0][0:ii])))
+                             np.array(self.toas.get_flag_value('weights')[0][0:ii]).astype(float)))
             photons.append(len(phss[0:ii]))
 
         plt.plot(photons, h_vec)
@@ -676,7 +676,7 @@ class MCMC:
             # Should I ensure all phases are positive? I don't think so...
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0])))
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0]).astype(float)))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -701,7 +701,7 @@ class MCMC:
             # Should I ensure all phases are positive? I don't think so...
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0])))
+            significance.append(hmw(phss, np.array(self.toas.get_flag_value('weights')[0]).astype(float)))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -735,7 +735,7 @@ class MCMC:
             phases = np.where(phss < 0.0, phss + 1.0, phss)
 
             # Calculate the significance, and append it to the list
-            significance.append(hmw(phases, np.array(self.toas.get_flag_value('weights')[0])))
+            significance.append(hmw(phases, np.array(self.toas.get_flag_value('weights')[0]).astype(float)))
 
         # plt.plot(F1_range, significance)
         # plt.show()
@@ -776,7 +776,7 @@ class MCMC:
 
             # Calculate the significance, and append it to the list
             significance.append(hmw(phss,
-                                    np.array(self.toas.get_flag_value('weights')[0])))
+                                    np.array(self.toas.get_flag_value('weights')[0]).astype(float)))
 
         if plotfile is not None:
             plt.plot(F0_range, significance)
