@@ -226,12 +226,12 @@ class MCMC:
     def make_TOAs(self):
 
         # Get the toa object
-        self.toas = toa.TOAs(toalist=self.data_fermi + self.data_NICER +
-                             self.data_NuSTAR)
+        # self.toas = toa.TOAs(toalist=self.data_fermi + self.data_NICER +
+        #                      self.data_NuSTAR)
 
         # Get the toa list
-        #self.toas_list = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
-        #                                   self.data_NuSTAR, ephem=self.args.ephem)
+        self.toas = toa.get_TOAs_list(self.data_fermi + self.data_NICER +
+                                      self.data_NuSTAR, ephem=self.args.ephem)
 
         # Combine weights from individual observatories
         weights = np.concatenate((self.weights_fermi, self.weights_NICER,
