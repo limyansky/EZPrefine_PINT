@@ -1006,6 +1006,64 @@ class MCMC:
         with open(save_name, 'w') as file:
             print(self.modelin, file=file)
 
+    # Fits gaussian pulse shapes to phase data
+    # npulses: The number of gaussian shapes to fit
+    # nbins: The number of histogram bins that that will be used to fit the
+    # gaussians to.
+    def fit_gaussian(self, npulse=1, nbins=100):
+
+        # Bin the data
+        values, centers = self.bin_phases(nbins=nbins)
+
+
+
+        return 0
+
+    # Creates a histogram (just the data parts) of phases
+    def bin_phases(self, nbins=100):
+
+        # Calculate phases
+        iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # Perform the binning
+        hist, bin_edges = np.histogram(phases,
+                                       bins=nbins,
+                                       weights=self.toas.get_flag_value('weights')[0].astype(float))
+
+        # Convert bin_edges to bin centers
+        bin_centers = (bin_edges[0:-1] + bin_edges[1::]) / 2
+
+        # Return the bin counts and bin centers
+        return hist, bin_centers
+
+    # Can be used to calculate a gaussian function
+    def gaussian(self, x, norm, center, width):
+
+        return norm * np.exp(-((x - center)**2) / (2 * (center**2)))
+
+    # Combines several gaussians into a single profile to be fit to the data
+    def gaussian_profile(self, x, norm, center, width):
+        """
+        Combines several gaussians into a single profile to be fit to the data
+
+        Parameters:
+            x: The x values where the y values are required
+            norm: An array of gaussian normalizations
+            center: An array of gaussian centers
+            width: An array of gaussian widths
+        """
+
+        y_values = np.zeros(len(x))
+
+        for ii in range(len(norm)):
+            y_values += self.gaussian(x, norm[ii], center[ii], width[ii])
+
+        return y_values
+
+
 
 # Stolen from PINT
 def phaseogram(
