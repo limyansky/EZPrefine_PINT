@@ -1006,16 +1006,31 @@ class MCMC:
         with open(save_name, 'w') as file:
             print(self.modelin, file=file)
 
-    # Fits gaussian pulse shapes to phase data
-    # npulses: The number of gaussian shapes to fit
-    # nbins: The number of histogram bins that that will be used to fit the
-    # gaussians to.
     def fit_gaussian(self, npulse=1, nbins=100):
+        """
+        Fits gaussian pulse shapes to phase data.
+
+        Parameters:
+            npulses: The number of gaussians to include
+            nbins: The number of bins the data will be put into for comparison
+                   to the gaussian template.
+        """
 
         # Bin the data
         values, centers = self.bin_phases(nbins=nbins)
 
+        # Create initial guesses for the gaussian profile
 
+        # The background starts as the average
+        background = np.mean(values)
+
+        # The pulses start with a height of the maximum minus the background
+        norm = max(values) - background
+
+        # The pulses will have a combined width of 1/5 the data
+        width = 0.2 / npulse
+
+        
 
         return 0
 
@@ -1045,7 +1060,7 @@ class MCMC:
         return norm * np.exp(-((x - center)**2) / (2 * (center**2)))
 
     # Combines several gaussians into a single profile to be fit to the data
-    def gaussian_profile(self, x, norm, center, width):
+    def gaussian_profile(self, x, norm, center, width, background):
         """
         Combines several gaussians into a single profile to be fit to the data
 
@@ -1054,12 +1069,15 @@ class MCMC:
             norm: An array of gaussian normalizations
             center: An array of gaussian centers
             width: An array of gaussian widths
+            background: A constant backgound
         """
 
         y_values = np.zeros(len(x))
 
         for ii in range(len(norm)):
             y_values += self.gaussian(x, norm[ii], center[ii], width[ii])
+
+        y_values += background
 
         return y_values
 
