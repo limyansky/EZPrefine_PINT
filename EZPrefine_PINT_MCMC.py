@@ -1030,9 +1030,72 @@ class MCMC:
         # The pulses will have a combined width of 1/5 the data
         width = 0.2 / npulse
 
-        
+        # The pulses are evenly spaced
+        center = 1 / npulse
+
+        # Create an initial guess vector
+        norm_vec = np.array([norm] * npulse)
+        center_vec = np.linspace(0, 1, npulse)
+        width_vec = np.array([width] * npulse)
+        background_vec = np.array(background)
+
+        initial = np.concatenate(norm_vec, center_vec, width_vec,
+                                 background_vec)
+
+        # A function to calculate chi^2 goodness of fit
+        def chi2(expected, observed):
+
+            numerator = np.square(observed - expected)
+
+            return np.sum(numerator / expected)
 
         return 0
+
+        # The function to be minimized
+        def to_min(initial, x_values=None, y_values=None):
+            """
+            A helper function written to confirm to scipy.optimize.minize
+            requrements for minimization.
+
+            Parameters:
+                initial: An input initial guess. Each pulse should have three
+                         variables, and there is an additional background
+                         variable. The order is ["norm"*n, "center"*n,
+                         "width"*n, background], where "n" is the number of
+                         pulses.
+
+            Keyword Arguments:
+            The function will not run without these keyword arguments, but they
+            aren't minimized either.
+                x_values: The values of bin centers on the x-axis (phase)
+                y_values: The actual number of photons in each bin
+            """
+
+            # Find the number of pulses being requested.
+            # The input will have one variable for background (hence the -1)
+            # and 3 variables per pulse. Thus, this finds the number of pulses
+            # based off the length of the input initial guesses.
+            n_pulses = (len(initial) - 1) / 3
+
+            # Pull out the norm, center, width, and background vectors
+            norm_vec = initial[0:n_pulses]
+            center_vec = initial[n_pulses:n_pulses*2]
+            width_vec = initial[n_pulses*2:n_pulses*3]
+            background_vec = initial[-1]
+
+            # Create the 'test' data, to compare to the actual data
+            observed = self.gaussian_profile(x_data, norm_vec, center_vec,
+                                             width_vec, background_vec)
+
+            # Compare the test data to the actual data
+            chi2_test = chi2(y_values, observed)
+
+            return chi2_test
+
+        # Perform the actual fitting
+
+        minimize(to_min, )
+        
 
     # Creates a histogram (just the data parts) of phases
     def bin_phases(self, nbins=100):
@@ -1052,7 +1115,7 @@ class MCMC:
         bin_centers = (bin_edges[0:-1] + bin_edges[1::]) / 2
 
         # Return the bin counts and bin centers
-        return hist, bin_centers
+        return hist, bin_centers, bin_edges
 
     # Can be used to calculate a gaussian function
     def gaussian(self, x, norm, center, width):
@@ -1081,6 +1144,41 @@ class MCMC:
 
         return y_values
 
+    # Generates a diagnostic plot comparing the data to the pulse profile.
+    def gaussian_plot(self, x, photons, norm, center, width, background):
+
+        # plot the raw data
+
+        # Create an X vector appropriate for plotting
+        # We need the bin width. This should be constant
+        bin_width = x[1] - x[0]
+
+        # The start of the first step
+        x_steps = x[0] - bin_width
+
+        # Subsequent bin edges
+        for ii in x:
+            x_steps.append(ii + bin_width)
+            x_steps.append(ii + bin_width)
+
+        # This produces an extra point at the end that I will delete
+        x_steps.pop()
+
+        # Create a photon list for plotting
+        photons_plot = []
+        for ii in photons:
+            photons_plot.append(ii)
+            photons_plot.append(ii)
+
+        # Plot the actual data
+        plt.plot(x_steps, photons_plot)
+
+        # Plot the hypothetical data
+        profile = gaussian_profile(x, norm, center, width, background)
+
+        plt.plot(x, profile, 'r')
+
+        plt.show()
 
 
 # Stolen from PINT
