@@ -1006,7 +1006,7 @@ class MCMC:
         with open(save_name, 'w') as file:
             print(self.modelin, file=file)
 
-    def fit_gaussian(self, npulse=1, nbins=100):
+    def fit_gaussian(self, npulse=1, nbins=100, initial=None):
         """
         Fits gaussian pulse shapes to phase data.
 
@@ -1021,26 +1021,31 @@ class MCMC:
 
         # Create initial guesses for the gaussian profile
 
-        # The background starts as the average
-        background = np.mean(values)
+        # If you don't specify an initial guess vector, then attempt to create
+        # one. This method is really poor, and probably will not work.
+        if initial is None:
+            # The background starts as the average
+            background = np.mean(values)
 
-        # The pulses start with a height of the maximum minus the background
-        norm = max(values) - background
+            # The pulses start with a height of the maximum minus the background
+            norm = max(values) - background
 
-        # The pulses will have a combined width of 1/5 the data
-        width = 0.2 / npulse
+            # The pulses will have a combined width of 1/5 the data
+            width = 0.02 / npulse
 
-        # The pulses are evenly spaced
-        center = 1 / npulse
+            # The pulses are evenly spaced
+            center = 1 / npulse
 
-        # Create an initial guess vector
-        norm_vec = np.array([norm] * npulse)
-        center_vec = np.linspace(0, 1, npulse)
-        width_vec = np.array([width] * npulse)
-        background_vec = np.array(background)
+            # Create an initial guess vector
+            norm_vec = np.array([norm] * npulse)
+            center_vec = np.linspace(0, 1, npulse)
+            width_vec = np.array([width] * npulse)
+            background_vec = np.array([background])
 
-        initial = np.concatenate(norm_vec, center_vec, width_vec,
-                                 background_vec)
+            initial = np.concatenate((norm_vec, center_vec, width_vec,
+                                      background_vec))
+        elif initial is not None:
+            pass
 
         # A function to calculate chi^2 goodness of fit
         def chi2(expected, observed):
@@ -1049,7 +1054,6 @@ class MCMC:
 
             return np.sum(numerator / expected)
 
-        return 0
 
         # The function to be minimized
         def to_min(initial, x_values=None, y_values=None):
@@ -1075,7 +1079,7 @@ class MCMC:
             # The input will have one variable for background (hence the -1)
             # and 3 variables per pulse. Thus, this finds the number of pulses
             # based off the length of the input initial guesses.
-            n_pulses = (len(initial) - 1) / 3
+            n_pulses = int((len(initial) - 1) / 3)
 
             # Pull out the norm, center, width, and background vectors
             norm_vec = initial[0:n_pulses]
@@ -1084,7 +1088,7 @@ class MCMC:
             background_vec = initial[-1]
 
             # Create the 'test' data, to compare to the actual data
-            observed = self.gaussian_profile(x_data, norm_vec, center_vec,
+            observed = self.gaussian_profile(x_values, norm_vec, center_vec,
                                              width_vec, background_vec)
 
             # Compare the test data to the actual data
@@ -1094,8 +1098,18 @@ class MCMC:
 
         # Perform the actual fitting
 
-        minimize(to_min, )
-        
+        fit_params = minimize(to_min, initial, args=(centers, values),
+                              method='Nelder-Mead')
+
+        norm_final = fit_params.x[0:npulse]
+        center_final = fit_params.x[npulse:npulse * 2]
+        width_final = fit_params.x[npulse * 2:npulse * 3]
+        background_final = fit_params.x[-1]
+
+        self.gaussian_plot(centers, values, norm_final, center_final,
+                           width_final, background_final)
+
+        return fit_params
 
     # Creates a histogram (just the data parts) of phases
     def bin_phases(self, nbins=100):
@@ -1109,18 +1123,18 @@ class MCMC:
         # Perform the binning
         hist, bin_edges = np.histogram(phases,
                                        bins=nbins,
-                                       weights=self.toas.get_flag_value('weights')[0].astype(float))
+                                       weights=np.array(self.toas.get_flag_value('weights')[0]).astype(float))
 
         # Convert bin_edges to bin centers
         bin_centers = (bin_edges[0:-1] + bin_edges[1::]) / 2
 
         # Return the bin counts and bin centers
-        return hist, bin_centers, bin_edges
+        return hist.value, bin_centers.value
 
     # Can be used to calculate a gaussian function
     def gaussian(self, x, norm, center, width):
 
-        return norm * np.exp(-((x - center)**2) / (2 * (center**2)))
+        return norm * np.exp(-((x - center)**2) / (2 * (width**2)))
 
     # Combines several gaussians into a single profile to be fit to the data
     def gaussian_profile(self, x, norm, center, width, background):
@@ -1138,9 +1152,9 @@ class MCMC:
         y_values = np.zeros(len(x))
 
         for ii in range(len(norm)):
-            y_values += self.gaussian(x, norm[ii], center[ii], width[ii])
+            y_values  = y_values + self.gaussian(x, norm[ii], center[ii], width[ii])
 
-        y_values += background
+        y_values = y_values + background
 
         return y_values
 
@@ -1151,10 +1165,10 @@ class MCMC:
 
         # Create an X vector appropriate for plotting
         # We need the bin width. This should be constant
-        bin_width = x[1] - x[0]
+        bin_width = (x[1] - x[0]) / 2
 
         # The start of the first step
-        x_steps = x[0] - bin_width
+        x_steps = [x[0] - bin_width]
 
         # Subsequent bin edges
         for ii in x:
@@ -1174,7 +1188,7 @@ class MCMC:
         plt.plot(x_steps, photons_plot)
 
         # Plot the hypothetical data
-        profile = gaussian_profile(x, norm, center, width, background)
+        profile = self.gaussian_profile(x, norm, center, width, background)
 
         plt.plot(x, profile, 'r')
 
