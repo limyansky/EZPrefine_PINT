@@ -278,7 +278,8 @@ class MCMC:
 
         print('\n')
         print('%d photons from Fermi' % (len(self.weights_fermi)))
-        print('%f is the minimum weight' % (min(self.weights_fermi)))
+        print('%f is the minimum weight' %
+              (min(self.weights_fermi.astype(float))))
         print('\n')
 
     # Store quantities related to NICER data
