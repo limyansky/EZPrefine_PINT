@@ -509,6 +509,18 @@ class MCMC:
         # Make the new model the old best fit model
         self.modelin = deepcopy(self.fitter.model)
 
+    # Manually change the .par file
+    def load_par(self, par_file, time=False):
+
+        # Load the new par file
+        self.modelin = pint.models.get_model(par_file)
+
+        # If requested, update the time range you are looking at
+        if time:
+            start = self.modelin.START.value
+            finish = self.modelin.FINISH.value
+            self.update_cut(start, finish)
+
     # Plot the data in a phaseogram
     def plot(self, bins=100, plotfile=None):
 
@@ -1007,7 +1019,7 @@ class MCMC:
         with open(save_name, 'w') as file:
             print(self.modelin, file=file)
 
-    def fit_gaussian(self, npulse=1, nbins=100, initial=None):
+    def fit_gaussian(self, npulse=1, nbins=100, initial=None, phase_shift=0):
         """
         Fits gaussian pulse shapes to phase data.
 
@@ -1018,7 +1030,7 @@ class MCMC:
         """
 
         # Bin the data
-        values, centers = self.bin_phases(nbins=nbins)
+        values, centers = self.bin_phases(nbins=nbins, phase_shift=phase_shift)
 
         # Create initial guesses for the gaussian profile
 
@@ -1113,13 +1125,22 @@ class MCMC:
         return fit_params
 
     # Creates a histogram (just the data parts) of phases
-    def bin_phases(self, nbins=100):
+    def bin_phases(self, nbins=100, phase_shift=0):
 
         # Calculate phases
         iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
 
+        # Make sure phase shift lies between 0 and 1
+        phase_shift = phase_shift % 1
+
+        # Add the phase shift
+        phss = phss + phase_shift
+
         # Ensure all postive
         phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # Ensure nothing is above 1.
+        phases = np.where(phases > 1, phases - 1, phases)
 
         # Perform the binning
         hist, bin_edges = np.histogram(phases,
