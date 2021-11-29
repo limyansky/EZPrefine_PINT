@@ -37,6 +37,9 @@ from scipy.optimize import minimize
 # Multiprocessing tools
 import multiprocessing as mp
 
+# Allows for wildcard matching
+import fnmatch
+
 # The funciton that actually runs when this script is called
 def main():
 
@@ -278,7 +281,8 @@ class MCMC:
 
         print('\n')
         print('%d photons from Fermi' % (len(self.weights_fermi)))
-        print('%f is the minimum weight' % (min(self.weights_fermi)))
+        print('%f is the minimum weight' %
+              (min(self.weights_fermi.astype(float))))
         print('\n')
 
     # Store quantities related to NICER data
@@ -507,6 +511,18 @@ class MCMC:
 
         # Make the new model the old best fit model
         self.modelin = deepcopy(self.fitter.model)
+
+    # Manually change the .par file
+    def load_par(self, par_file, time=False):
+
+        # Load the new par file
+        self.modelin = pint.models.get_model(par_file)
+
+        # If requested, update the time range you are looking at
+        if time:
+            start = self.modelin.START.value
+            finish = self.modelin.FINISH.value
+            self.update_cut(start, finish)
 
     # Plot the data in a phaseogram
     def plot(self, bins=100, plotfile=None):
@@ -1005,6 +1021,276 @@ class MCMC:
     def save_par(self, save_name):
         with open(save_name, 'w') as file:
             print(self.modelin, file=file)
+
+    def fit_gaussian(self, npulse=1, nbins=100, initial=None, phase_shift=0):
+        """
+        Fits gaussian pulse shapes to phase data.
+
+        Parameters:
+            npulses: The number of gaussians to include
+            nbins: The number of bins the data will be put into for comparison
+                   to the gaussian template.
+        """
+
+        # Bin the data
+        values, centers = self.bin_phases(nbins=nbins, phase_shift=phase_shift)
+
+        # Create initial guesses for the gaussian profile
+
+        # If you don't specify an initial guess vector, then attempt to create
+        # one. This method is really poor, and probably will not work.
+        if initial is None:
+            # The background starts as the average
+            background = np.mean(values)
+
+            # The pulses start with a height of the maximum minus the background
+            norm = max(values) - background
+
+            # The pulses will have a combined width of 1/5 the data
+            width = 0.02 / npulse
+
+            # The pulses are evenly spaced
+            center = 1 / npulse
+
+            # Create an initial guess vector
+            norm_vec = np.array([norm] * npulse)
+            center_vec = np.linspace(0, 1, npulse)
+            width_vec = np.array([width] * npulse)
+            background_vec = np.array([background])
+
+            initial = np.concatenate((norm_vec, center_vec, width_vec,
+                                      background_vec))
+        elif initial is not None:
+            pass
+
+        # A function to calculate chi^2 goodness of fit
+        def chi2(expected, observed):
+
+            numerator = np.square(observed - expected)
+
+            return np.sum(numerator / expected)
+
+        # The function to be minimized
+        def to_min(initial, x_values=None, y_values=None):
+            """
+            A helper function written to confirm to scipy.optimize.minize
+            requrements for minimization.
+
+            Parameters:
+                initial: An input initial guess. Each pulse should have three
+                         variables, and there is an additional background
+                         variable. The order is ["norm"*n, "center"*n,
+                         "width"*n, background], where "n" is the number of
+                         pulses.
+
+            Keyword Arguments:
+            The function will not run without these keyword arguments, but they
+            aren't minimized either.
+                x_values: The values of bin centers on the x-axis (phase)
+                y_values: The actual number of photons in each bin
+            """
+
+            # Find the number of pulses being requested.
+            # The input will have one variable for background (hence the -1)
+            # and 3 variables per pulse. Thus, this finds the number of pulses
+            # based off the length of the input initial guesses.
+            n_pulses = int((len(initial) - 1) / 3)
+
+            # Pull out the norm, center, width, and background vectors
+            norm_vec = initial[0:n_pulses]
+            center_vec = initial[n_pulses:n_pulses * 2]
+            width_vec = initial[n_pulses * 2:n_pulses * 3]
+            background_vec = initial[-1]
+
+            # Create the 'test' data, to compare to the actual data
+            observed = self.gaussian_profile(x_values, norm_vec, center_vec,
+                                             width_vec, background_vec)
+
+            # Compare the test data to the actual data
+            chi2_test = chi2(y_values, observed)
+
+            return chi2_test
+
+        # Perform the actual fitting
+
+        fit_params = minimize(to_min, initial, args=(centers, values),
+                              method='Nelder-Mead')
+
+        norm_final = fit_params.x[0:npulse]
+        center_final = fit_params.x[npulse:npulse * 2]
+        width_final = fit_params.x[npulse * 2:npulse * 3]
+        background_final = fit_params.x[-1]
+
+        self.gaussian_plot(centers, values, norm_final, center_final,
+                           width_final, background_final)
+
+        return fit_params
+
+    # Creates a histogram (just the data parts) of phases
+    def bin_phases(self, nbins=100, phase_shift=0):
+
+        # Calculate phases
+        iphss, phss = self.modelin.phase(self.toas)  # , abs_phase=True)
+
+        # Make sure phase shift lies between 0 and 1
+        phase_shift = phase_shift % 1
+
+        # Add the phase shift
+        phss = phss + phase_shift
+
+        # Ensure all postive
+        phases = np.where(phss < 0.0, phss + 1.0, phss)
+
+        # Ensure nothing is above 1.
+        phases = np.where(phases > 1, phases - 1, phases)
+
+        # Perform the binning
+        hist, bin_edges = np.histogram(phases,
+                                       bins=nbins,
+                                       weights=np.array(self.toas.get_flag_value('weights')[0]).astype(float))
+
+        # Convert bin_edges to bin centers
+        bin_centers = (bin_edges[0:-1] + bin_edges[1::]) / 2
+
+        # Return the bin counts and bin centers
+        return hist.value, bin_centers.value
+
+    # Can be used to calculate a gaussian function
+    def gaussian(self, x, norm, center, width):
+
+        return norm * np.exp(-((x - center)**2) / (2 * (width**2)))
+
+    # Combines several gaussians into a single profile to be fit to the data
+    def gaussian_profile(self, x, norm, center, width, background):
+        """
+        Combines several gaussians into a single profile to be fit to the data
+
+        Parameters:
+            x: The x values where the y values are required
+            norm: An array of gaussian normalizations
+            center: An array of gaussian centers
+            width: An array of gaussian widths
+            background: A constant backgound
+        """
+
+        y_values = np.zeros(len(x))
+
+        for ii in range(len(norm)):
+            y_values  = y_values + self.gaussian(x, norm[ii], center[ii], width[ii])
+
+        y_values = y_values + background
+
+        return y_values
+
+    # Generates a diagnostic plot comparing the data to the pulse profile.
+    def gaussian_plot(self, x, photons, norm, center, width, background):
+
+        # plot the raw data
+
+        # Create an X vector appropriate for plotting
+        # We need the bin width. This should be constant
+        bin_width = (x[1] - x[0]) / 2
+
+        # The start of the first step
+        x_steps = [x[0] - bin_width]
+
+        # Subsequent bin edges
+        for ii in x:
+            x_steps.append(ii + bin_width)
+            x_steps.append(ii + bin_width)
+
+        # This produces an extra point at the end that I will delete
+        x_steps.pop()
+
+        # Create a photon list for plotting
+        photons_plot = []
+        for ii in photons:
+            photons_plot.append(ii)
+            photons_plot.append(ii)
+
+        # Plot the actual data
+        plt.plot(x_steps, photons_plot)
+
+        # Plot the hypothetical data
+        profile = self.gaussian_profile(x, norm, center, width, background)
+
+        plt.plot(x, profile, 'r')
+
+        plt.show()
+
+    # In a .par file stitched together with glitches, align the segments by
+    # setting the maximum value to occur at the same phase location.
+    def gleph_align_max(self):
+
+        # Pull the timing solution start and end
+        start = self.modelin['START'].value
+        finish = self.modelin['FINISH'].value
+
+        # Pull the names of the glich epochs and phases
+        epochs = fnmatch.filter(self.modelin.params, 'GLEP_*')
+        phases = fnmatch.filter(self.modelin.params, 'GLPH_*')
+
+        # Sort the epochs by number
+        sort_with = []
+        for ii in epochs:
+            sort_with.append(int(ii[5:]))
+
+        #https://stackoverflow.com/questions/9764298/how-to-sort-two-lists-which-reference-each-other-in-the-exact-same-way
+        sort_with, epochs = (list(t) for t in zip(*sorted(zip(sort_with, epochs))))
+
+        # Sort the phase offset terms by number
+        sort_with = []
+        for ii in phases:
+            sort_with.append(int(ii[5:]))
+
+        #https://stackoverflow.com/questions/9764298/how-to-sort-two-lists-which-reference-each-other-in-the-exact-same-way
+        sort_with, phases = (list(t) for t in zip(*sorted(zip(sort_with, phases))))
+
+        # Create a list of start and stop times to work through
+        # Stick the overall start time at the front
+        start_stop = [start]
+
+        # Go through the glitch epochs and add them
+        for ii in epochs:
+            start_stop.append(self.modelin[ii].value)
+
+        # Stick the overall stop at the end
+        start_stop.append(finish)
+
+        # For the first time period (start to glitch 0), find the maximum value
+        # of the pulse profile.
+
+        # Change the time period
+        self.update_cut(minMJD=start_stop[0], maxMJD=start_stop[1])
+
+        # bin this time range of data
+        value, centers = self.bin_phases()
+
+        # The phase value of the binned phaseogram maximum
+        refrence_phase = centers[np.where(value == max(value))]
+
+        # Iterate through the glitch time periods
+        for ii in range(len(epochs)):
+
+            # Find the phase at the maximum in this time period
+            # ii + 1 because we already did
+            # update_run(minMJD=start_stop[0], maxMJD=start_stop[1])
+            # in the line above to cover the time before the first glitch.
+            self.update_cut(minMJD=start_stop[ii + 1],
+                            maxMJD=start_stop[ii + 2])
+
+            value, centers = self.bin_phases()
+            phase_max = centers[np.where(value == max(value))]
+
+            # Calculate the difference between my new maximum phase, and my
+            # reference phase.
+            phase_difference = refrence_phase - phase_max
+
+            # Get the name of the phase term
+            phase_term = phases[ii]
+
+            # Update the model
+            self.modelin[phase_term].value = phase_difference
 
 
 # Stolen from PINT
