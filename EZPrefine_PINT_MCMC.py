@@ -37,6 +37,9 @@ from scipy.optimize import minimize
 # Multiprocessing tools
 import multiprocessing as mp
 
+# Allows for wildcard matching
+import fnmatch
+
 # The funciton that actually runs when this script is called
 def main():
 
@@ -1067,7 +1070,6 @@ class MCMC:
 
             return np.sum(numerator / expected)
 
-
         # The function to be minimized
         def to_min(initial, x_values=None, y_values=None):
             """
@@ -1096,8 +1098,8 @@ class MCMC:
 
             # Pull out the norm, center, width, and background vectors
             norm_vec = initial[0:n_pulses]
-            center_vec = initial[n_pulses:n_pulses*2]
-            width_vec = initial[n_pulses*2:n_pulses*3]
+            center_vec = initial[n_pulses:n_pulses * 2]
+            width_vec = initial[n_pulses * 2:n_pulses * 3]
             background_vec = initial[-1]
 
             # Create the 'test' data, to compare to the actual data
@@ -1215,6 +1217,80 @@ class MCMC:
         plt.plot(x, profile, 'r')
 
         plt.show()
+
+    # In a .par file stitched together with glitches, align the segments by
+    # setting the maximum value to occur at the same phase location.
+    def gleph_align_max(self):
+
+        # Pull the timing solution start and end
+        start = self.modelin['START'].value
+        finish = self.modelin['FINISH'].value
+
+        # Pull the names of the glich epochs and phases
+        epochs = fnmatch.filter(self.modelin.params, 'GLEP_*')
+        phases = fnmatch.filter(self.modelin.params, 'GLPH_*')
+
+        # Sort the epochs by number
+        sort_with = []
+        for ii in epochs:
+            sort_with.append(int(ii[5:]))
+
+        #https://stackoverflow.com/questions/9764298/how-to-sort-two-lists-which-reference-each-other-in-the-exact-same-way
+        sort_with, epochs = (list(t) for t in zip(*sorted(zip(sort_with, epochs))))
+
+        # Sort the phase offset terms by number
+        sort_with = []
+        for ii in phases:
+            sort_with.append(int(ii[5:]))
+
+        #https://stackoverflow.com/questions/9764298/how-to-sort-two-lists-which-reference-each-other-in-the-exact-same-way
+        sort_with, phases = (list(t) for t in zip(*sorted(zip(sort_with, phases))))
+
+        # Create a list of start and stop times to work through
+        # Stick the overall start time at the front
+        start_stop = [start]
+
+        # Go through the glitch epochs and add them
+        for ii in epochs:
+            start_stop.append(self.modelin[ii].value)
+
+        # Stick the overall stop at the end
+        start_stop.append(finish)
+
+        # For the first time period (start to glitch 0), find the maximum value
+        # of the pulse profile.
+
+        # Change the time period
+        self.update_cut(minMJD=start_stop[0], maxMJD=start_stop[1])
+
+        # bin this time range of data
+        value, centers = self.bin_phases()
+
+        # The phase value of the binned phaseogram maximum
+        refrence_phase = centers[np.where(value == max(value))]
+
+        # Iterate through the glitch time periods
+        for ii in range(len(epochs)):
+
+            # Find the phase at the maximum in this time period
+            # ii + 1 because we already did
+            # update_run(minMJD=start_stop[0], maxMJD=start_stop[1])
+            # in the line above to cover the time before the first glitch.
+            self.update_cut(minMJD=start_stop[ii + 1],
+                            maxMJD=start_stop[ii + 2])
+
+            value, centers = self.bin_phases()
+            phase_max = centers[np.where(value == max(value))]
+
+            # Calculate the difference between my new maximum phase, and my
+            # reference phase.
+            phase_difference = refrence_phase - phase_max
+
+            # Get the name of the phase term
+            phase_term = phases[ii]
+
+            # Update the model
+            self.modelin[phase_term].value = phase_difference
 
 
 # Stolen from PINT
