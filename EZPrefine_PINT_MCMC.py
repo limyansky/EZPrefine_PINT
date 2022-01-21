@@ -555,7 +555,7 @@ class MCMC:
         # phases = np.where(phss < 0.0 * u.cycle, phss + 1.0 * u.cycle, phss)
 
         # Pull out the first H-Test
-        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')).astype(float))
+        htest = hmw(phases, np.array(self.toas.get_flag_value('weights')[0]).astype(float))
 
         print(htest)
 
