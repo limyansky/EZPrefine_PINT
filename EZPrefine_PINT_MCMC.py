@@ -1183,7 +1183,22 @@ class MCMC:
         return y_values
 
     # Generates a diagnostic plot comparing the data to the pulse profile.
-    def gaussian_plot(self, x, photons, norm, center, width, background):
+    def gaussian_plot(self, x, photons, norm, center, width, background,
+                      phase_range=None):
+        """
+        Generates a diagnostic plot comparing the data to the pulse profile.
+
+            Parameters:
+                x: The x values where the y values are required
+                center: An array of gaussian centers
+                width: An array of gaussian widths
+                background: A constant backgound
+
+            Keyword Arguments:
+                phase_range: Highlights the area under the pulse profile to
+                             check phase selections. Takes the form
+                             [[start, stop], [start, stop]]
+    """
 
         # plot the raw data
 
@@ -1215,6 +1230,24 @@ class MCMC:
         profile = self.gaussian_profile(x, norm, center, width, background)
 
         plt.plot(x, profile, 'r')
+
+        # Fill in the area under the curve withithin a specified phase range,
+        # if requested.
+        if phase_range is not None:
+
+            # Go through the pairs of starts and stops provided
+            for ii in phase_range:
+
+                # Create a range of x values between the start and stop
+                x_values = np.linspace(ii[0], ii[1])
+
+                # Corresponding y values
+                y_values = self.gaussian_profile(x_values,
+                                                 norm, center, width,
+                                                 background)
+
+                plt.fill_between(x_values, y_values, 'o')
+
 
         plt.show()
 
