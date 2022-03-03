@@ -1246,8 +1246,14 @@ class MCMC:
                                                  norm, center, width,
                                                  background)
 
+                # Make a copy of the current x limit values
+                ylim = plt.gca().get_ylim()
+
+                # Do the filling
                 plt.fill_between(x_values, y_values, 'o')
 
+                # Reset the x-axis
+                plt.gca().set_ylim(ylim[0], ylim[1])
 
         plt.show()
 
