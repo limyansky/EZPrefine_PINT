@@ -573,7 +573,7 @@ class MCMC:
         iphss, phss = self.modelin.phase(self.toas)
 
         # Pull out the weights
-        weights = np.array(self.toas.get_flag_value('weights')[0].astype(float))
+        weights = np.array(self.toas.get_flag_value('weights')[0]).astype(float)
 
         # Pull out the MJDs
         photon_mjds = self.toas.get_mjds().value
