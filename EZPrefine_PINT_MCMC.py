@@ -12,7 +12,7 @@ from pint.fermi_toas import load_Fermi_TOAs
 from pint.event_toas import load_NICER_TOAs
 from pint.event_toas import load_NuSTAR_TOAs
 import pint.toa as toa
-from pint.eventstats import hmw, h2sig
+from pint.eventstats import hmw, h2sig, z2mw
 from pint.sampler import EmceeSampler
 from pint.mcmc_fitter import MCMCFitter, lnlikelihood_chi2
 from pint.residuals import Residuals
@@ -567,7 +567,7 @@ class MCMC:
         return 0
 
     # Plot the weighted H-Test vs time
-    def plot_hmw(self, plotfile=None, sort=False):
+    def plot_hmw(self, plotfile=None, sort=False, zm=None):
 
         # Calculate the phases
         iphss, phss = self.modelin.phase(self.toas)
@@ -600,15 +600,30 @@ class MCMC:
 
             h_vec.append(hmw(phss[0:ii], weights[0:ii]))
             mjds.append(photon_mjds[ii])
-            print(photon_mjds[ii])
 
-        print(mjds)
-        plt.plot(mjds, h_vec)
+        plt.plot(mjds, h_vec, label='H-Test')
+
+        if zm is not None:
+            z_vec = []
+
+            for ii in range(0, len(phss), int(floor(len(phss) / 50))):
+                z_vec.append(z2mw(phss[0:ii], weights[0:ii], m=zm))
+
+            plt.plot(mjds, z_vec, label='Z_{}'.format(str(zm)))
+
+        plt.legend()
+        plt.tight_layout()
 
         if plotfile is not None:
+
             plt.savefig(plotfile)
         else:
             plt.show()
+
+        if zm is None:
+            return mjds, h_vec
+        elif zm is not None:
+            return mjds, h_vec, z_vec
 
         # Plot the weighted H-Test vs photon count
     def plot_Phmw(self, plotfile=None):
